@@ -6,6 +6,8 @@ This project rebuilds the long-context and omni probes on one real, actively mai
 
 **Result:** [RECOMMENDATION.md](RECOMMENDATION.md). Every run folder has `SHA256SUMS` and `validation.json` (`validate.py`).
 
+**Visual guide:** [FP8 backend selection map](2_fp8_thinker/FINDINGS.md#backend-selection-map) shows why the automatic FP8 path was slower for long-output decode and which existing backends improved it.
+
 **Pass condition for the whole project:** every customer-facing number in the final recommendation traces to a valid raw record under `results/qwen3-omni-on-modal/`, and every planned cost ceiling can be recomputed with [`budget.py`](budget.py).
 
 ## Why this design

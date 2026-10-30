@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 416" role="img" aria-labelledby="title description">
+  <title id="title">Qwen3-Omni FP8 backend choices</title>
+  <desc id="description">The automatic FP8 configuration uses Triton for dense matrix multiplication and CUTLASS for MoE, taking 6.52 milliseconds per token. The selected configuration uses DeepGEMM for dense work and Triton fused MoE, taking 4.12 milliseconds per token. BF16 takes 4.46 milliseconds per token.</desc>
+  <rect width="880" height="416" rx="20" fill="#f7f5ef"/>
+  <g font-family="Arial, Helvetica, sans-serif" fill="#263b38">
+    <text x="32" y="43" font-size="24" font-weight="700">Qwen3-Omni FP8: the backend choice matters</text>
+    <text x="32" y="70" font-size="15" fill="#536560">One H100 · text-only thinker · 8k input / 1k output · batch-1 decode</text>
+
+    <rect x="32" y="94" width="816" height="124" rx="14" fill="#fff" stroke="#d5ded9"/>
+    <text x="54" y="123" font-size="17" font-weight="700">Automatic FP8 policy</text>
+    <text x="54" y="150" font-size="15">Dense layers</text>
+    <text x="54" y="178" font-size="19" font-weight="700">Triton</text>
+    <path d="M250 163h70" stroke="#8ca39b" stroke-width="2"/>
+    <path d="m320 163-8-6v12z" fill="#8ca39b"/>
+    <text x="342" y="150" font-size="15">MoE layers</text>
+    <text x="342" y="178" font-size="19" font-weight="700">CUTLASS</text>
+    <text x="820" y="145" text-anchor="end" font-size="26" font-weight="700" fill="#9d4d35">6.52 ms/token</text>
+    <text x="820" y="174" text-anchor="end" font-size="14" fill="#9d4d35">46% slower than BF16</text>
+
+    <rect x="32" y="232" width="816" height="124" rx="14" fill="#e7f1e9" stroke="#9cbaa9"/>
+    <text x="54" y="261" font-size="17" font-weight="700">Selected FP8 backends</text>
+    <text x="54" y="288" font-size="15">Dense layers</text>
+    <text x="54" y="316" font-size="19" font-weight="700">DeepGEMM</text>
+    <path d="M250 301h70" stroke="#6d9580" stroke-width="2"/>
+    <path d="m320 301-8-6v12z" fill="#6d9580"/>
+    <text x="342" y="288" font-size="15">MoE layers</text>
+    <text x="342" y="316" font-size="19" font-weight="700">Triton fused MoE</text>
+    <text x="820" y="283" text-anchor="end" font-size="26" font-weight="700" fill="#276c50">4.12 ms/token</text>
+    <text x="820" y="312" text-anchor="end" font-size="14" fill="#276c50">7.6% faster than BF16</text>
+
+    <text x="32" y="390" font-size="14" fill="#536560">BF16 reference: 4.46 ms/token. Existing backends selected by configuration flags; no new kernel code.</text>
+  </g>
+</svg>

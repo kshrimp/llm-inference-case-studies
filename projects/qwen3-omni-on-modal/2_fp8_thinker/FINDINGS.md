@@ -97,6 +97,20 @@ The B_default and B_deepgemm traces were saved as raw 1.7 GB JSON, because the 3
 
 A matches experiment 1 and 2a (4.449–4.461), so there is no drift across three containers.
 
+### Backend selection map
+
+The Qwen3-Omni thinker has dense matrix multiplications and mixture-of-experts (MoE) layers. The model defines those operations; the serving engine chooses GPU backends to execute them. "Triton dense" and "Triton MoE" are separate paths for different operations. For this native block-FP8 checkpoint on the tested SGLang-Omni pin, the automatic policy selected Triton dense GEMM and CUTLASS MoE. We tested that default first, then changed one backend at a time to isolate the slowdown.
+
+![Two FP8 backend configurations: automatic Triton dense plus CUTLASS MoE at 6.52 ms/token, and selected DeepGEMM dense plus Triton fused MoE at 4.12 ms/token; BF16 is 4.46 ms/token.](../assets/fp8-backend-map.svg)
+
+| Configuration | Dense backend | MoE backend | Batch-1 decode at 8k/1k |
+| --- | --- | --- | ---: |
+| BF16 reference | cuBLAS | Triton fused MoE | 4.461 ms/token |
+| FP8 automatic policy | Triton, untuned for these shapes | CUTLASS | 6.524 ms/token |
+| FP8 selected pair | DeepGEMM | Triton fused MoE | 4.122 ms/token (measured in step 2b-2) |
+
+These are existing upstream backends selected by configuration flags, not kernels implemented in this study. The automatic policy is a workload-dependent performance issue for long-output, batch-1 decode on this H100. The measurements do not establish the best default for other workloads or GPUs. The proposed SGLang-Omni report is still a draft, not a posted issue or PR.
+
 ### Step anatomy from the traces (median ms per decode step; BF16 column is experiment 1 container 2, trace L)
 
 | Category | BF16 | FP8 default | FP8 + DeepGEMM dense | FP8 + Triton MoE |
