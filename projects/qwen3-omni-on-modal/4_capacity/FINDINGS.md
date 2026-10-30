@@ -1,6 +1,6 @@
 # Experiment 4 findings
 
-## Step 4a: memory fraction and closed-loop concurrency scan (2026-10-29)
+## Step 4a: memory fraction and closed-loop concurrency scan
 
 ### What ran
 
@@ -59,18 +59,18 @@ The README rule sets the open-loop rates as fractions (0.25, 0.5, 0.7, 0.85, 1.0
 
 Each rate needs 60 s of warm-up plus a 300 s measured window, so 6 rates × 3 conditions is about 108 minutes, more than the 4b row's 75-minute timeout. **Proposal:** 4b runs BF16 at 0.90 and FP8 combined at full resolution, and BF16 at 0.784 at two rates only (0.5× and 1.0×). That is about 78 minutes, so the 4b ceiling rises from 87 to 92 minutes ($7.42, from $7.02). This needs your OK before launch.
 
-## Step 4b: open-loop capacity against the frozen latency target (2026-10-30)
+## Step 4b: open-loop capacity against the frozen latency target
 
 ### What ran
 
-Run `20261030T025640Z-e72ff679-capacity-sweep` (`app.py --stage capacity-sweep`): one `H100!`, three sessions in sequence, radix cache off. The criteria are the frozen ones in the README: p95 TTFT ≤ 3.0 s **and** p95 time between tokens ≤ 60 ms; a 60 s warm-up then a 300 s measured window; Poisson arrivals with a fixed seed per rate; at least 60 completed requests; completed rate ≥ 95% of offered; at most 64 requests in flight; no error, no request over 120 s, and every output exactly 1,000 tokens. The README's dated notes record the implementation choices made before the run.
+Run `20261030T025640Z-e72ff679-capacity-sweep` (`app.py --stage capacity-sweep`): one `H100!`, three sessions in sequence, radix cache off. The criteria are the frozen ones in the README: p95 TTFT ≤ 3.0 s **and** p95 time between tokens ≤ 60 ms; a 60 s warm-up then a 300 s measured window; Poisson arrivals with a fixed seed per rate; at least 60 completed requests; completed rate ≥ 95% of offered; at most 64 requests in flight; no error, no request over 120 s, and every output exactly 1,000 tokens. The README's pre-run notes record the implementation choices made before the run.
 
 - **Workload:** 50 copy-task prompts over windows 500 words apart, each sized to 8,000 tokens by the server (7,999–8,001). Every session re-counted all 50 and matched the sized set.
 - **FP8c_0.90:** FP8 with `deep_gemm` dense + `triton` MoE. New closed-loop levels: c32 1,246 and **c40 1,436 tok/s**, so the rates used a maximum of 1,436 tok/s (4a measured 1,390 at c32).
 - **A_0.90:** BF16 at memory fraction 0.90 (maximum 730 tok/s from 4a).
 - **A_0.784:** BF16 at the automatic memory fraction (maximum 318 tok/s from 4a).
 
-**All 2,504 requests are valid:** 1,947 in measured windows, 485 in warm-up periods, and 72 closed-loop. All three sessions completed; the app is stopped. The container ran about 70 minutes (≈ $5.65 by wall clock; billing rows for 2026-10-30 not yet posted). Reproduce every number with `table_4b.py`, which recomputes each verdict from the raw records and asserts it matches the stored one.
+**All 2,504 requests are valid:** 1,947 in measured windows, 485 in warm-up periods, and 72 closed-loop. All three sessions completed; the app is stopped. The container ran about 70 minutes (≈ $5.65 by wall clock; billing rows for not yet posted). Reproduce every number with `table_4b.py`, which recomputes each verdict from the raw records and asserts it matches the stored one.
 
 ### Results (offered rate = requests actually sent in the window ÷ 300 s)
 

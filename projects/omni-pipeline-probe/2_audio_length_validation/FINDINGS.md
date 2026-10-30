@@ -1,4 +1,4 @@
-# Experiment 2 findings: audio duration 10 / 30 / 90 s, 2026-10-26
+# Experiment 2 findings: audio duration 10 / 30 / 90 s
 
 ## What ran
 

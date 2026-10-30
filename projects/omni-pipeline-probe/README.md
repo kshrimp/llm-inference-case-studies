@@ -2,28 +2,28 @@
 
 For one **audio-in, text-out** request, how much client-observed time passes before text appears, and which recorded pipeline intervals explain that delay? As audio duration grows, does the encoder or thinker become the larger contributor? The [long-context probe](../long-context-probe/README.md) motivates the question, but its Qwen3-0.6B/L4 timings are not a performance baseline for Qwen3-Omni/H100. This study measures single-request serving latency and request-level events, not offline throughput, kernel time, concurrency, or goodput.
 
-**Status (2026-10-26):** complete for experiments 1 and 2; optional speech-output experiment 3 has not run. Step 0 (CPU), container A smoke, and two independent measurement containers B and C ran; all 20 measured requests pass the strengthened request-level checks. **Results:** at the same 409-token thinker prompt, 30 s audio reaches first text in 67.8 ms vs 40.2 ms for text, almost all of the difference before the thinker ([exp 1](1_stage_breakdown/FINDINGS.md)). From 10 to 90 s of audio, TTFT rises 66 ms, 69% of it in CPU preprocessing, while the encoder adds only 7 ms ([exp 2](2_audio_length_validation/FINDINGS.md)). Unexplained: successive thinker output chunks are about 0.5 ms farther apart in the audio condition; output token sequences also differ. Total probe cost $1.142945 (CPU setup $0.170214, A $0.302128, B $0.351583, C $0.319020); all apps stopped.
+**Status:** experiments 1–3 complete. Step 0 (CPU), container A smoke, and two independent measurement containers B and C ran; all 20 measured requests pass the strengthened request-level checks. **Results:** at the same 409-token thinker prompt, 30 s audio reaches first text in 67.8 ms vs 40.2 ms for text, almost all of the difference before the thinker ([exp 1](1_stage_breakdown/FINDINGS.md)). From 10 to 90 s of audio, TTFT rises 66 ms, 69% of it in CPU preprocessing, while the encoder adds only 7 ms ([exp 2](2_audio_length_validation/FINDINGS.md)). Unexplained: successive thinker output chunks are about 0.5 ms farther apart in the audio condition; output token sequences also differ. Total probe cost $1.142945 (CPU setup $0.170214, A $0.302128, B $0.351583, C $0.319020); all apps stopped.
 
-**Evidence preservation (2026-10-26):** [validate.py](validate.py) writes `SHA256SUMS` and `validation.json` into each of the 5 saved run folders: 2 setup, 1 smoke, 2 measurement. Both measurement runs are `valid` with 10/10 measured requests and unique request IDs, and the smoke gate is `valid`. `validate.py --check` re-verifies every checksum. `validation.json` also lists the data-contract (private study notes) artifacts this layout lacks (separate manifest, resolved config, workload, resources and summary files, and per-run cost), each with the reason. These runs are therefore exploratory evidence, not publishable contract-compliant runs. The git-ignored `results/omni-pipeline-probe/` (inputs, all run folders and tables, 40 MB) is archived as `omni-pipeline-probe-results-20261026.tar.gz` (SHA-256 `fdfd4736…9a46`) in the Modal Volume `omni-probe-backup`, and a download round-trip matched the hash. Restore with `uv run modal volume get omni-probe-backup /omni-pipeline-probe-results-20261026.tar.gz . && tar -xzf omni-pipeline-probe-results-20261026.tar.gz -C results`.
+**Evidence preservation:** [validate.py](validate.py) writes `SHA256SUMS` and `validation.json` into each of the 5 saved run folders: 2 setup, 1 smoke, 2 measurement. Both measurement runs are `valid` with 10/10 measured requests and unique request IDs, and the smoke gate is `valid`. `validate.py --check` re-verifies every checksum. `validation.json` also lists the data-contract (private study notes) artifacts this layout lacks (separate manifest, resolved config, workload, resources and summary files, and per-run cost), each with the reason. These runs are therefore exploratory evidence, not publishable contract-compliant runs. The git-ignored `results/omni-pipeline-probe/` (inputs, all run folders and tables, 40 MB) is archived as `omni-pipeline-probe-results-20261026.tar.gz` (SHA-256 `fdfd4736…9a46`) in the Modal Volume `omni-probe-backup`, and a download round-trip matched the hash. Restore with `uv run modal volume get omni-probe-backup /omni-pipeline-probe-results-20261026.tar.gz . && tar -xzf omni-pipeline-probe-results-20261026.tar.gz -C results`.
 
-**Why a side project:** the current track is the tiny-engine study. The user chose this on 2026-10-25 as exploratory practice: reading an unfamiliar serving stack, multimodal workload design, and running a large model on Modal. It does not replace the W3 mapping or the CPU toy engine.
+**Purpose:** exploratory practice with an unfamiliar serving stack, multimodal workloads, and a large model on Modal.
 
-**Evidence limit from the 2026-10-26 review:** the B/C request records and raw events reproduce the tables, but the run layout does not yet include every artifact and checksum in the project's full serving data contract (private study notes). Treat these as exploratory measurements. Before using them in a public report, package the raw files with checksums and a validation record, state unavailable fields with reasons, and retain the original manifests unchanged.
+**Evidence limit from the review:** the B/C request records and raw events reproduce the tables, but the run layout does not yet include every artifact and checksum in the project's full serving data contract (private study notes). Treat these as exploratory measurements. Before using them in a public report, package the raw files with checksums and a validation record, state unavailable fields with reasons, and retain the original manifests unchanged.
 
 ## Read and run in this order
 
 | Experiment | Question | Status | Start here |
 | --- | --- | --- | --- |
-| 0. Setup and smoke | Can the pinned image, weights, audio route, events, token accounting, and cache controls work on one H100? | Done: gate passed 2026-10-26 | [Step 0](#step-0-cpu-only-setup-and-source-checks) and [GPU gate](#container-a-gpu-smoke-and-decision) below |
-| 1. Stage breakdown | At one bounded audio duration, what are client TTFT and the observed pipeline intervals? Text is a descriptive path check | Done 2026-10-26: audio +28 ms TTFT vs text at 409 tokens, mostly preprocessing + encoder | [README](1_stage_breakdown/README.md) |
-| 2. Audio-length validation | At three bounded audio durations, which intervals grow and by how much? | Done 2026-10-26: 10→90 s TTFT +66 ms, preprocessing +45.5 ms | [README](2_audio_length_validation/README.md) |
-| 3. Speech output (optional) | With text + speech output on one H100, where does time to first audio go, and which config lever lowers it without stalls or changed output? | Done 2026-10-28 through C′: the thinker's whole reply is 58% of TTFA, because the colocated config holds the talker until the thinker finishes. Talker partial start cuts TTFA 340→226 ms (32 tok) and 650→223 ms (80 tok), with identical output; the thinker is 41% slower while they overlap. Cost $1.94 | [README](3_speech_output/README.md), [FINDINGS](3_speech_output/FINDINGS.md) |
+| 0. Setup and smoke | Can the pinned image, weights, audio route, events, token accounting, and cache controls work on one H100? | Done: gate passed | [Step 0](#step-0-cpu-only-setup-and-source-checks) and [GPU gate](#container-a-gpu-smoke-and-decision) below |
+| 1. Stage breakdown | At one bounded audio duration, what are client TTFT and the observed pipeline intervals? Text is a descriptive path check | Done : audio +28 ms TTFT vs text at 409 tokens, mostly preprocessing + encoder | [README](1_stage_breakdown/README.md) |
+| 2. Audio-length validation | At three bounded audio durations, which intervals grow and by how much? | Done : 10→90 s TTFT +66 ms, preprocessing +45.5 ms | [README](2_audio_length_validation/README.md) |
+| 3. Speech output (optional) | With text + speech output on one H100, where does time to first audio go, and which config lever lowers it without stalls or changed output? | Done through C′: the thinker's whole reply is 58% of TTFA, because the colocated config holds the talker until the thinker finishes. Talker partial start cuts TTFA 340→226 ms (32 tok) and 650→223 ms (80 tok), with identical output; the thinker is 41% slower while they overlap. Cost $1.94 | [README](3_speech_output/README.md), [FINDINGS](3_speech_output/FINDINGS.md) |
 
 ## Shared decisions
 
 | Choice | Decision | Why |
 | --- | --- | --- |
-| Engine | `sglang-omni` v0.1.9, commit `8200f49934d66de591c035cab1c626c0600905fa` (2026-10-21, Apache-2.0) | Latest release. Main moves daily (`85a4a057` on 2026-10-25) |
+| Engine | `sglang-omni` v0.1.9, commit `8200f49934d66de591c035cab1c626c0600905fa` (Apache-2.0) | Pinned release; main moved beyond this commit (`85a4a057` at the time of the check) |
 | Base image | `lmsysorg/sglang@sha256:5fc09edb6a0bb1d5b6992b543723c66d08f86d7a507e951e87e0d05db4ac766e` | The digest the v0.1.9 `docker/Dockerfile` builds from. We add the omni package at the pinned commit with its dependency overrides |
 | Model | `Qwen/Qwen3-Omni-30B-A3B-Instruct` at revision `26291f793822fb6be9555850f06dfe95f2d7e695`, BF16 | Official checkpoint. The repo's FP8 config points at a community quantization (`marksverdhei/Qwen3-Omni-30B-A3B-FP8`); FP8 would add a second variable and unclear provenance |
 | Mode | `--text-only` for experiments 1–2 | Upstream docs: text-only mode runs the thinker pipeline on a single GPU and does not load the talker/code2wav. Speech mode needs either 2 GPUs or the colocated config (experiment 3) |
@@ -63,7 +63,7 @@ No GPU is launched in this step.
 3. **Inputs (local, done):** fixed text and deterministic 16 kHz mono WAVs. Use one short intelligible speech fixture in the smoke; build duration variants from the same continuous speech content so silence detection or content changes do not explain the timing trend. Seeded noise is suitable only if the pinned path proves it is processed like speech. Record the source, SHA-256, sample count and exact duration.
 4. **Source reading (local):** confirm the text-only profile route, exact emitted events and clock, request IDs, response usage, thinker input positions, cache control, and audio length limit at the pin. Fill the [stage map](1_stage_breakdown/README.md#stage-map) with file:symbol references. Missing support narrows the question before launch.
 
-### Step 0 results (2026-10-25)
+### Step 0 results
 
 **Image and CLI check:** completed (`results/omni-pipeline-probe/setup/20261026T025017Z-e4571d72-cpu-check/run.json`). The image builds from the pinned base digest with sglang-omni checked out at `8200f499` (verified with `git rev-parse`). Installed: Python 3.12.15, torch 2.14.1+cu130, sglang 0.5.22, sglang-omni 0.1.9, transformers 5.19.0, flashinfer-python 0.7.1, flash-attn-4 4.0.0b35. `sgl-omni serve --help` exits 0. `sgl-omni config resolve --text-only --thinker.engine.disable_radix_cache true --show diff` prints exactly one change, `stages.thinker.engine.disable_radix_cache: None -> True`, so the cache override parses on CPU. Whether the engine honours it is checked in A. That first run reported `--allowed-local-media-path` as missing only because typer's help box cut off the flag name; `cpu_check` now sets a wide terminal.
 
@@ -99,7 +99,7 @@ The clip ends are fixed sample counts, so a clip can end mid-word. Container A r
 
 Start one server; record the observed GPU, memory headroom and readiness. Send one short text and one short audio request, verify that audio reaches its encoder, and compare the API prompt count with thinker positions. Inspect raw events for one request, confirm that the thinker radix cache is off in the server log, send the same WAV twice and then a different variant (expect miss, hit, miss in the `encoder_cache` trace lines, which proves the trace and the variant rule work), and compare one short identical request with event recording off/on. Try the planned longest duration only after the short cases pass. Freeze the three durations and output cap for B. If event boundaries or cache state cannot be established, report client-latency-only pilot results or stop the stage comparison.
 
-### Runbook (written 2026-10-25, run 2026-10-26)
+### Runbook (written, run )
 
 `app.py --stage smoke` starts one `H100!` container. In it, the server runs `sgl-omni serve` in text-only mode on 127.0.0.1, with `--thinker.engine.disable_radix_cache true`, `--allowed-local-media-path /inputs` and `SGLANG_OMNI_TRACE_ENCODER_CACHE=1`. The WAVs and manifest are mounted read-only, and the container first checks every WAV's decoded-sample SHA-256 against the manifest. JIT caches go to the Volume `omni-jit-cache`, so A's startup is a cold-cache startup and B's is not. Startup time is recorded and is never a request measurement. Streaming requests run one at a time, greedy, `max_tokens: 128`; the audio prompt is "Transcribe the speech in this audio exactly."
 
@@ -118,16 +118,16 @@ Server readiness has a 780 s deadline, each request 180 s, and the function a ha
 
 ```bash
 cd /path/to/llm-inference-case-studies
-uv run python -c 'import runpy; m=runpy.run_path("projects/omni-pipeline-probe/app.py"); m["main"](stage="smoke", dry_run=True)'   # no GPU; prints limits, $2.50, server command
-uv run modal app list                                                   # nothing from omni-pipeline-probe running
-uv run modal billing report --start 2026-10-01 --end 2026-11-01 --json   # reconcile; then write the cost-log line
+uv run python -c 'import runpy; m=runpy.run_path("projects/omni-pipeline-probe/app.py"); m["main"](stage="smoke", dry_run=True)' # no GPU; prints limits, $2.50, server command
+uv run modal app list # nothing from omni-pipeline-probe running
+uv run modal billing report --start "$START_DATE" --end "$END_DATE" --json # reconcile; then write the cost-log line
 uv run modal run projects/omni-pipeline-probe/app.py::main --stage smoke
 uv run python projects/omni-pipeline-probe/smoke_report.py results/omni-pipeline-probe/smoke/<run_id>
 ```
 
 Artifacts in `results/omni-pipeline-probe/smoke/<run_id>/`: `run.json` (pins, limits, GPU, input check, readiness, notes), `requests.jsonl` (one record per step: client wall/monotonic times, TTFT, completion time, raw `usage`, finish reason, text), `events.jsonl` (raw recorder rows plus source file), `server.log`, and `checks.json` from [smoke_report.py](smoke_report.py). The report marks each check true, false, or null with a reason. **Container B may be reserved only if `gate_for_container_B.pass` is true**, meaning all of: inputs match; server ready; every step completed; audio events show `modality=audio`; the cache pattern is exactly miss / hit / miss / miss…; the radix cache is off in the server log; events correlate under the client `request_id`; event order is consistent. The report also prints the prompt-count differences (30 s − 10 s against the formula's 260 tokens, 90 s − 10 s against 1,040), the engine `#new-token` values next to the API prompt counts, GPU memory after readiness and at peak, the single profile-off/on pair, and every output text for a content check. `smoke_report.py` was tested only on synthetic run folders (a passing case and an empty-log case); its regular expressions for the server-log lines are guesses until A's real log exists.
 
-### Container A results (2026-10-26)
+### Container A results
 
 Run `20261026T035505Z-10b5b3db-smoke` (artifacts in `results/omni-pipeline-probe/smoke/<run_id>/`; regenerate the checks with `smoke_report.py`). Observed GPU: NVIDIA H100 80GB HBM3, driver 610.57.04. The server became healthy 208 s after launch, with a cold JIT cache, including upstream warmup. All 8 steps completed and the server exited cleanly (code 0). The app is stopped; actual cost was $0.302128 against the $2.50 reservation. **These are compatibility results from single requests, not benchmark numbers.**
 
@@ -166,7 +166,7 @@ All event columns are in ms. Four points matter for B's design:
 
 **Report fixes after seeing the data (disclosed):** the first `smoke_report.py` pass failed two checks because the report was wrong, not the run. (1) Several events (`stage_aggregate_ready`, `stage_first_stream_chunk_sent`) are emitted by more than one stage, so ordering must be keyed by (stage, event). (2) The `Init Unified Radix Cache` log line appears even when the tree is disabled, because `create_tree_cache` passes `disable=` to it. The radix check now uses behaviour: zero cached tokens on an identical repeat. Both fixes come from the pinned source and the raw rows, not from tuning to a desired outcome. The raw `events.jsonl` and `server.log` are unchanged.
 
-### Frozen settings for B (accepted 2026-10-26)
+### Frozen settings for B (accepted )
 
 | Setting | Proposal | Reason |
 | --- | --- | --- |
@@ -178,13 +178,13 @@ All event columns are in ms. Four points matter for B's design:
 | Event recording | On for all measured requests | One pair showed no large overhead; overhead stays a stated limitation |
 | Radix cache | Off (`--thinker.engine.disable_radix_cache true`), verified by `#cached-token: 0` in the log for every measured request | As in A |
 
-On 2026-10-26 the user accepted these settings, pre-approved any reasonable change, raised the Modal budget to **$30 total**, and dropped the PREDICTION.md files: no user prediction is required for this probe. One detail was settled while writing the runner: the text control is the **written form of the same passage** (Project Gutenberg eBook #132, Giles translation, from "5, 6. _The Moral Law_ causes", recorded with its SHA-256 in the manifest), prefixed with "Repeat this text exactly:". Its word count is chosen inside the container by a binary search with unmeasured 1-token probes, so the server's own `prompt_tokens` lands closest to 409. The probe counts are saved in `run.json`.
+On the user accepted these settings, pre-approved any reasonable change, raised the Modal budget to **$30 total**, and dropped the PREDICTION.md files: no user prediction is required for this probe. One detail was settled while writing the runner: the text control is the **written form of the same passage** (Project Gutenberg eBook #132, Giles translation, from "5, 6. _The Moral Law_ causes", recorded with its SHA-256 in the manifest), prefixed with "Repeat this text exactly:". Its word count is chosen inside the container by a binary search with unmeasured 1-token probes, so the server's own `prompt_tokens` lands closest to 409. The probe counts are saved in `run.json`.
 
 **Agent expectation (written while B ran, before any B output was read; not the user's prediction).** At 30 s, client TTFT should be roughly 70–100 ms, made of preprocessing (~25 ms), the encoder (~8–25 ms) and the thinker's first forward (~28 ms) plus about 10 ms of HTTP and hand-offs. The text control at the same 409 tokens should reach first text 30–50 ms sooner, with a similar thinker first forward. Decode ms/token (~4.8) should not differ between them. Across 10→90 s, preprocessing should grow roughly linearly and contribute the largest part of the TTFT change; the warmed encoder should grow more weakly. If the warmed 90 s encoder time is much larger than A's 24.6 ms, A's value was not a first-of-shape artifact.
 
 ## Budget
 
-Prices from [modal.com/pricing](https://modal.com/pricing), read 2026-10-25: H100 $0.001097/s, CPU $0.0000131/core/s, memory $0.00000222/GiB/s. With 8 CPU cores and 64 GiB memory, one H100 container costs about **$0.081 per minute**. CPU image/download work and Volume storage are separate budget items; a region or non-preemptible premium would change the estimate.
+Prices from [modal.com/pricing](https://modal.com/pricing), read : H100 $0.001097/s, CPU $0.0000131/core/s, memory $0.00000222/GiB/s. With 8 CPU cores and 64 GiB memory, one H100 container costs about **$0.081 per minute**. CPU image/download work and Volume storage are separate budget items; a region or non-preemptible premium would change the estimate.
 
 | Container | Purpose | Worst case (startup 10 + run 20 + idle 1 min) |
 | --- | --- | ---: |
@@ -193,7 +193,7 @@ Prices from [modal.com/pricing](https://modal.com/pricing), read 2026-10-25: H10
 | C (optional) | Independent repeat or retry after B's evidence is reviewed | $2.50 |
 | | **A + B** / **A + B + C** | **$5.00** / **$7.50** |
 
-Spend after Step 0 was $1.719030, against what was then a $10 approval. On 2026-10-26 the user raised the approval to $30 total, which allowed the optional C. Actual costs: A $0.302128, B $0.351583, C $0.319020. Account total after C: $2.693673 (`--json`), leaving $27.31.
+Spend after Step 0 was $1.719030, against what was then a $10 approval. On the user raised the approval to $30 total, which allowed the optional C. Actual costs: A $0.302128, B $0.351583, C $0.319020. Account total after C: $2.693673 (`--json`), leaving $27.31.
 
 The per-container figure comes from `app.py::worst_case_usd` with `startup_timeout=600`, `timeout=1200`, `scaledown_window=60`, `max_containers=1`, `retries=0`, 8 CPU cores and 64 GiB. The timeout was raised from 900 s to 1,200 s because the server's load and warmup (upstream warmup default 600 s) run inside the function; with 900 s the requests would have almost no time left. Modal timeouts can slightly exceed their nominal boundary ([Modal timeout behavior](https://modal.com/docs/guide/timeouts)).
 
@@ -203,19 +203,19 @@ Before every paid launch: `uv run modal app list`, reconcile `uv run modal billi
 
 ```text
 projects/omni-pipeline-probe/
-  README.md                         this index
-  app.py                            shared bounded Modal runner: cpu-check, download, smoke (A), measure (B/C)
-  smoke_report.py                   checks a smoke run and decides the container B gate
-  validate.py                       SHA256SUMS + validation.json per run; --check re-verifies
-  make_inputs.py                    builds the LibriVox WAV clips and variants (local)
-  inputs_manifest.json              source URL/narrator/hash, clip offsets, per-variant file and decoded-sample hashes
-  analysis.py                       shared reader: measurement run → one validated row per request
-  1_stage_breakdown/                README, FINDINGS, run.sh, table.py
-  2_audio_length_validation/        README, FINDINGS, run.sh, table.py
-  speech_report.py                  exp 3: per-request speech timeline + A′ gate
-  3_speech_output/                  README, FINDINGS, run.sh, table.py
+ README.md this index
+ app.py shared bounded Modal runner: cpu-check, download, smoke (A), measure (B/C)
+ smoke_report.py checks a smoke run and decides the container B gate
+ validate.py SHA256SUMS + validation.json per run; --check re-verifies
+ make_inputs.py builds the LibriVox WAV clips and variants (local)
+ inputs_manifest.json source URL/narrator/hash, clip offsets, per-variant file and decoded-sample hashes
+ analysis.py shared reader: measurement run → one validated row per request
+ 1_stage_breakdown/ README, FINDINGS, run.sh, table.py
+ 2_audio_length_validation/ README, FINDINGS, run.sh, table.py
+ speech_report.py exp 3: per-request speech timeline + A′ gate
+ 3_speech_output/ README, FINDINGS, run.sh, table.py
 
-results/omni-pipeline-probe/        git-ignored: setup/, smoke/, measure/<run_id>/ (run.json, requests.jsonl, events.jsonl, server.log), inputs/, tables/
+results/omni-pipeline-probe/ git-ignored: setup/, smoke/, measure/<run_id>/ (run.json, requests.jsonl, events.jsonl, server.log), inputs/, tables/
 ```
 
 ## Risks

@@ -1,4 +1,4 @@
-# Experiment 10 findings: long prefills freeze in-flight decodes, and chunking does not help (2026-10-25)
+# Experiment 10 findings: long prefills freeze in-flight decodes, and chunking does not help
 
 **Result: under mini-SGLang's prefill-first scheduler, four 8,000-token prompts stall all 32 decoding short requests for about 1.2 s**, against a normal 10.4 ms decode step. The short requests finish 55% later, while their **median** time between tokens is unchanged. The prefill chunk size does not relieve the stall: 8k and 16k chunks are equivalent, and 2k chunks are about 0.1 s worse because of their extra steps. This matches the source: `_schedule_next_batch` tries prefill before decode, so chunks run back to back. Offline, single engine, one L4, BF16.
 

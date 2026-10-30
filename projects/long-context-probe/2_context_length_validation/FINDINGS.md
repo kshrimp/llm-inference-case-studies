@@ -1,4 +1,4 @@
-# Context-length validation findings — 2026-10-23
+# Context-length validation findings —
 
 ## Unprofiled 1,000-output runs
 
@@ -61,6 +61,6 @@ Every trace run logged an 18.43 GiB KV pool with capacity for 172,544 tokens. Th
 
 ## Cost and cleanup
 
-The first `report.csv` export created 2026-10-23 15:24 EDT contained four `long-context-length-validation` app rows totaling $0.03379862. A later Modal billing report posted six rows totaling **$0.04966881** for the six runs. This is an app-level total. An agent check of `uv run modal app list` showed all six validation apps stopped before the short-trace launches.
+The first `report.csv` export created 15:24 EDT contained four `long-context-length-validation` app rows totaling $0.03379862. A later Modal billing report posted six rows totaling **$0.04966881** for the six runs. This is an app-level total. An agent check of `uv run modal app list` showed all six validation apps stopped before the short-trace launches.
 
 The three short traces were launched sequentially against a pre-run **$1.02** reservation within the $10 sprint budget. The refreshed Modal billing report shows app charges of $0.00905369, $0.00799793, and $0.00745577 respectively, totaling **$0.02450739** in posted charges. The account total in that report is $0.52293722. An agent check of `uv run modal app list` showed all three trace apps stopped with zero tasks. No FP8 treatment or additional GPU run was launched.

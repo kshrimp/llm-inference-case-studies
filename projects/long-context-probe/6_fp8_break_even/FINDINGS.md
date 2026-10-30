@@ -1,4 +1,4 @@
-# Experiment 6 findings: FP8 KV break-even map (2026-10-25)
+# Experiment 6 findings: FP8 KV break-even map
 
 **Result: FP8's decode-step saving is set by the KV bytes each step reads.** The gain runs from neutral or −1% for one 256-token request to +49% throughput for 32 × 4,096 tokens. A two-parameter bandwidth model fits all 16 cells (R² = 1.000), with break-even at about 616 tokens in flight and a 45% step-time ceiling.
 

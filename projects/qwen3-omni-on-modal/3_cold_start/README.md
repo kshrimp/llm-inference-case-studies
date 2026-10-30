@@ -22,7 +22,7 @@ Timestamps from different clocks are never subtracted from each other.
 
 ## What experiment 1 already shows (not controlled cold starts)
 
-Server-log phases from two containers ([experiment 1 review](../1_long_context_anatomy/FINDINGS.md#review-checks-2026-10-28-no-new-gpu-runs)): about 39 s of process spawn and imports, **weight load 47–177 s for the same 56.9 GB (1.20 vs 0.32 GB/s)**, prefill CUDA-graph capture 30–34 s, decode graph capture 4–5 s, and a 14–18 s warmup request. Server ready took 146–282 s. Two consequences:
+Server-log phases from two containers ([experiment 1 review](../1_long_context_anatomy/FINDINGS.md#review-checks--no-new-gpu-runs)): about 39 s of process spawn and imports, **weight load 47–177 s for the same 56.9 GB (1.20 vs 0.32 GB/s)**, prefill CUDA-graph capture 30–34 s, decode graph capture 4–5 s, and a 14–18 s warmup request. Server ready took 146–282 s. Two consequences:
 
 - **Under 30 s is not reachable by tuning the normal start.** Loading the BF16 weights alone in 30 s needs at least 1.9 GB/s, faster than either observed rate, before any other phase. Only a restored memory snapshot can skip loading. The 30 s target therefore applies to the snapshot condition. For the non-snapshot conditions the target is **≤ 90 s**, which needs fast loading and the graph-capture lever.
 - **Weight-load variance is itself a finding.** A 3.7× spread on the same Volume makes p95 cold start much worse than the median. Every condition records weight-load seconds and GB/s from the server log, and the report shows the spread, not only the median.
@@ -37,7 +37,7 @@ Server-log phases from two containers ([experiment 1 review](../1_long_context_a
 
 FP8 weights as a cold-start lever (37.4 instead of 56.9 GB to read) is added as a fourth condition only if experiment 2 passes B and the budget allows it.
 
-### Revised conditions (2026-10-30, before any exp 3 run)
+### Revised conditions (before any exp 3 run)
 
 Experiments 2 and 4a changed what a customer would deploy: FP8 (community checkpoint) with `deep_gemm` dense + `triton` MoE at `mem_fraction_static` 0.90. Server logs from 2b-2, 4a and 4b show that this config's startup cost is not where experiment 1 put it:
 

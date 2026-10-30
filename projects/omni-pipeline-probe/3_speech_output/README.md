@@ -1,10 +1,10 @@
 # Experiment 3 (optional): diagnose speech-output latency and test one lever
 
-**Status (2026-10-28):** done through C′. **L1 (talker partial start) wins:** `S32` TTFA ~340 → 226 ms and `Sfull` ~650 → 223 ms, with identical text and audio and no stalls. The thinker decodes 41% slower while the two overlap. See [FINDINGS.md](FINDINGS.md). The optional D′ (L1 + MPS) is awaiting a decision. The one-H100 BF16 speech baseline was a feasibility question, not an established configuration: [upstream issue #432](https://github.com/sgl-project/sglang-omni/issues/432) says full BF16 colocation did not fit on an H100, and [PR #454](https://github.com/sgl-project/sglang-omni/pull/454) added a supported FP8 path. Step 0′ must settle the checkpoint/configuration before A′ is launched. Source facts below were read at the pinned `8200f499` checkout; runtime behavior remains to be verified. Every launch needs a cost-log reservation first. No user prediction (waived for this probe). An agent expectation is written before each lever run.
+**Status:** done through C′. **L1 (talker partial start) wins:** `S32` TTFA ~340 → 226 ms and `Sfull` ~650 → 223 ms, with identical text and audio and no stalls. The thinker decodes 41% slower while the two overlap. See [FINDINGS.md](FINDINGS.md). The optional D′ (L1 + MPS) is awaiting a decision. The one-H100 BF16 speech baseline was a feasibility question, not an established configuration: [upstream issue #432](https://github.com/sgl-project/sglang-omni/issues/432) says full BF16 colocation did not fit on an H100, and [PR #454](https://github.com/sgl-project/sglang-omni/pull/454) added a supported FP8 path. Step 0′ must settle the checkpoint/configuration before A′ is launched. Source facts below were read at the pinned `8200f499` checkout; runtime behavior remains to be verified. Every launch needs a cost-log reservation first. No user prediction (waived for this probe). An agent expectation is written before each lever run.
 
-## Step 0′ results (2026-10-27)
+## Step 0′ results
 
-**BF16 feasibility.** Issue #432 (opened 2026-05-12, closed 2026-05-24 by PR #454) states in its motivation that full BF16 colocation did not fit on one H100. It is a feature request, not a measurement at our pin. The pinned `8200f499` (2026-10-21) has `examples/configs/qwen3_omni_colocated_h100_bf16.yaml`, and upstream CI uses it for the speech-output TTS test: `tests/test_model/conftest.py::start_qwen3_omni_bf16_colocated_router` starts "2 BF16 colocated replicas (one per H100)" with `audio_output=True` on `[self-hosted, h100]` runners. The checkpoint's safetensors headers at our revision give BF16 sizes: thinker LM + lm_head 61.06 GB, talker LM + code predictor + projections 6.64 GB, audio tower 1.30 GB, vision 1.08 GB, code2wav 0.43 GB. Against the config's budgets on an 85.5 GB (79.6 GiB) H100, the thinker's 0.78 leaves about 5.6 GB beyond its weights and the talker's 0.10 about 1.9 GB. That is tight but plausible on paper. **Decision: BF16 A′ goes ahead with this pinned config, and no FP8 fallback.** A failed or out-of-memory startup is a stop result recorded as such. It does not open an FP8 track without a new decision.
+**BF16 feasibility.** Issue #432 (opened, closed by PR #454) states in its motivation that full BF16 colocation did not fit on one H100. It is a feature request, not a measurement at our pin. The pinned `8200f499` has `examples/configs/qwen3_omni_colocated_h100_bf16.yaml`, and upstream CI uses it for the speech-output TTS test: `tests/test_model/conftest.py::start_qwen3_omni_bf16_colocated_router` starts "2 BF16 colocated replicas (one per H100)" with `audio_output=True` on `[self-hosted, h100]` runners. The checkpoint's safetensors headers at our revision give BF16 sizes: thinker LM + lm_head 61.06 GB, talker LM + code predictor + projections 6.64 GB, audio tower 1.30 GB, vision 1.08 GB, code2wav 0.43 GB. Against the config's budgets on an 85.5 GB (79.6 GiB) H100, the thinker's 0.78 leaves about 5.6 GB beyond its weights and the talker's 0.10 about 1.9 GB. That is tight but plausible on paper. **Decision: BF16 A′ goes ahead with this pinned config, and no FP8 fallback.** A failed or out-of-memory startup is a stop result recorded as such. It does not open an FP8 track without a new decision.
 
 **Config and levers (CPU run `20261027T235454Z-9af2b068-speech-cpu`).** The pinned file is as listed above. Base and all three levers resolve, each to exactly the intended changes:
 
@@ -20,7 +20,7 @@
 
 **Runner.** `app.py` now has stages `speech-cpu`, `speech-smoke`, `speech-measure`, and `speech-ab --lever L1|L2|L3`. Each server session saves its folder under `results/omni-pipeline-probe/speech/<run_id>/<session>/`. [speech_report.py](../speech_report.py) prints per-request client metrics, the event timeline before first audio, and the A′ gate. Both were tested locally against a fake SSE server and synthetic events.
 
-## Container A′ results (2026-10-28)
+## Container A′ results
 
 Run `20261027T235833Z-882c4881-speech-smoke`; checks with [speech_report.py](../speech_report.py) (`report.json` in the run folder). The observed GPU was an H100 80GB HBM3. **BF16 colocation fits:** 77.6 of 81.6 GB were used after readiness. The server was ready after 383 s with a cold JIT cache, including upstream speech warmup. All 9 steps completed. Actual cost was $0.676318. **These are compatibility results from single requests, not benchmark numbers.**
 
@@ -52,7 +52,7 @@ All times are in ms from client dispatch. Smoke observations, to be checked in B
 5. The speech requests report `finish_reason=stop` at exactly 32 completion tokens, but text-only requests on the same server report `length`. The stream's final reason comes from a different terminal stage, so completion count, not finish reason, is the validity check for `S32`.
 6. **MPS starts on Modal.** The `--mps auto` probe session was ready after 132 s (warm JIT). Its single, unwarmed request (TTFA 388 ms) is not a comparison.
 
-## Container B′ results and lever decision (2026-10-28)
+## Container B′ results and lever decision
 
 Run `20261028T000826Z-0fa799c7-speech-measure`. The server was ready after 328 s with a warm JIT cache. All 7 measured requests are valid: each had an encoder-cache miss, the expected completion count, and frames equal to samples. Actual cost was $0.502370.
 
@@ -202,7 +202,7 @@ Rates are $0.001344/s for an H100 with 8 cores and 64 GiB. Worst case is (600 s 
 
 The last recorded total is $2.693673 of the approved $30. A–C actually cost $0.30–0.35 each. Before each launch: `modal app list`, reconcile `modal billing report --json`, and write the cost-log line. Afterwards record actual spend and confirm the app has stopped. Stop and ask before anything beyond D′.
 
-## Agent expectation (written 2026-10-27, before any speech run; not the user's prediction)
+## Agent expectation (written, before any speech run; not the user's prediction)
 
 **Baseline (conditional on a viable, selected speech configuration; text-only BF16 timings may not transfer):**
 - `S32` TTFA about 0.4–0.8 s: the thinker finishes at about 215 ms (experiment 1), then talker prefill, about 10 talker steps, and the first code2wav window.

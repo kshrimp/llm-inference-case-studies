@@ -1,6 +1,6 @@
 # FP8 KV-cache feasibility in mini-SGLang
 
-**Status: v1 (2026-10-23) failed with NaN, from layer-0 K overflowing ±448. v2 (2026-10-24), a saturating cast, is correct on the fixtures, with decode attention −42.3% per step and whole call −13.7%; see [FINDINGS.md](FINDINGS.md).** Next (ranked in [FINDINGS.md](FINDINGS.md#next-steps-revised-2026-10-24)): reproduce in full SGLang, whose regular KV write path also lacks saturation in source; test FP8 capacity on the W2 throughput benchmark; defer v3 scales. This experiment asks whether storing KV in FP8 (e4m3) instead of BF16 reduces KV bytes and speeds up the 8,000-input / 1,000-output offline workload, and which kernels change. The user chose on 2026-10-23 to run it as an early, exploratory tweak. It follows the [profiling baseline](../1_profile_baseline/FINDINGS.md) and [context-length validation](../2_context_length_validation/FINDINGS.md). The prediction is in [PREDICTION.md](PREDICTION.md). All GPU work runs on Modal.
+**Status: v1 failed with NaN, from layer-0 K overflowing ±448. v2, a saturating cast, is correct on the fixtures, with decode attention −42.3% per step and whole call −13.7%; see [FINDINGS.md](FINDINGS.md).** Next (ranked in [FINDINGS.md](FINDINGS.md#next-steps-outcomes-updated)): reproduce in full SGLang, whose regular KV write path also lacks saturation in source; test FP8 capacity on the W2 throughput benchmark; defer v3 scales. This experiment asks whether storing KV in FP8 (e4m3) instead of BF16 reduces KV bytes and speeds up the 8,000-input / 1,000-output offline workload, and which kernels change. It was run as an early, exploratory tweak. It follows the [profiling baseline](../1_profile_baseline/FINDINGS.md) and [context-length validation](../2_context_length_validation/FINDINGS.md). The prediction is in [PREDICTION.md](PREDICTION.md). All GPU work runs on Modal.
 
 ## Why we ran this
 
@@ -10,9 +10,9 @@ Experiments 1 and 2 showed that, for one long prompt, decode attention is one of
 
 1. Wrote a 25-line opt-in patch ([`fp8_kv_cache.patch`](fp8_kv_cache.patch)) that stores K/V as `float8_e4m3fn` with scale 1.0 and has FlashInfer dequantize inside attention. Weights, activations, and queries stay BF16.
 2. Built two Modal images from the same upstream commit and the same pinned packages: unmodified BF16 control and patched FP8.
-3. **v1 (2026-10-23):** ran a 1,024-token FP8 pilot, then BF16, FP8, FP8, BF16 at 8,000 input / 1,000 output, with matched 128-output traces on repeat 1. FP8 was 43% faster in decode attention, but its output collapsed to token `0`.
+3. **v1:** ran a 1,024-token FP8 pilot, then BF16, FP8, FP8, BF16 at 8,000 input / 1,000 output, with matched 128-output traces on repeat 1. FP8 was 43% faster in decode attention, but its output collapsed to token `0`.
 4. Added a `diagnose` stage that scans the stored KV. It found layer-0 K values up to 516, above e4m3's ±448 range, which PyTorch 2.9.1's cast turns into NaN.
-5. **v2 (2026-10-24):** wrote a new prediction, then added a clamp to ±448 before the cast ([`fp8_kv_cache_v2_saturate.patch`](fp8_kv_cache_v2_saturate.patch)) and repeated the pilot, diagnostics, paired runs, and trace comparison.
+5. **v2:** wrote a new prediction, then added a clamp to ±448 before the cast ([`fp8_kv_cache_v2_saturate.patch`](fp8_kv_cache_v2_saturate.patch)) and repeated the pilot, diagnostics, paired runs, and trace comparison.
 6. Ran a 200-problem arithmetic accuracy check (`--stage eval`) for BF16, v1, and v2, scored with [`score_eval.py`](score_eval.py).
 
 This `app.py` is also the shared runner for experiments 5, 6, 7, 9, and 10 (stages `bench`, `sweep`, `needle`, `unittest`, `interference`).
@@ -33,19 +33,19 @@ uv run modal run $D/app.py::main --stage pilot --variant fp8 --input-length 1024
 # v1: plain cast (reproduces the NaN failure)
 uv run modal run $D/app.py::main --stage pilot --variant fp8 --input-length 1024 --repeat 1
 uv run modal run $D/app.py::main --stage final --variant bf16 --input-length 8000 --repeat 1
-uv run modal run $D/app.py::main --stage final --variant fp8  --input-length 8000 --repeat 1
-uv run modal run $D/app.py::main --stage final --variant fp8  --input-length 8000 --repeat 2
+uv run modal run $D/app.py::main --stage final --variant fp8 --input-length 8000 --repeat 1
+uv run modal run $D/app.py::main --stage final --variant fp8 --input-length 8000 --repeat 2
 uv run modal run $D/app.py::main --stage final --variant bf16 --input-length 8000 --repeat 2
 uv run modal run $D/app.py::main --stage diagnose --variant bf16 --input-length 1024
-uv run modal run $D/app.py::main --stage diagnose --variant fp8  --input-length 1024
+uv run modal run $D/app.py::main --stage diagnose --variant fp8 --input-length 1024
 
 # v2: saturating cast
 uv run modal run $D/app.py::main --stage pilot --variant fp8_sat --input-length 1024 --repeat 1
 uv run modal run $D/app.py::main --stage diagnose --variant fp8_sat --input-length 1024
-uv run modal run $D/app.py::main --stage final --variant bf16    --input-length 8000 --repeat 1
+uv run modal run $D/app.py::main --stage final --variant bf16 --input-length 8000 --repeat 1
 uv run modal run $D/app.py::main --stage final --variant fp8_sat --input-length 8000 --repeat 1
 uv run modal run $D/app.py::main --stage final --variant fp8_sat --input-length 8000 --repeat 2
-uv run modal run $D/app.py::main --stage final --variant bf16    --input-length 8000 --repeat 2
+uv run modal run $D/app.py::main --stage final --variant bf16 --input-length 8000 --repeat 2
 
 # Arithmetic accuracy check (one container each)
 uv run modal run $D/app.py::main --stage eval --variant bf16
@@ -56,7 +56,7 @@ uv run modal run $D/app.py::main --stage eval --variant fp8
 uv run python $D/table.py
 uv run python $D/compare_traces.py $R/*-final-bf16-8000-r1/trace.json $R/*-final-fp8_sat-8000-r1/trace.json
 uv run python $D/score_eval.py
-uv run modal app list   # expect no running long-context-fp8-kv-cache app
+uv run modal app list # expect no running long-context-fp8-kv-cache app
 ```
 
 The sections below explain each step, what to expect, and when to stop.
@@ -113,7 +113,7 @@ Expect `"gpu_launched": false`, `"patch_sha256": "34379d45…"`, the pins, and `
 
 ## 2. Cost gate
 
-Before **each** paid command, check Modal Usage and [current prices](https://modal.com/pricing). Then confirm the reservation on the study-plan status board (private study notes). At prices checked 2026-10-23, one container reserves **$0.34** (5 min startup + 15 min execution + 1 min idle). One pilot plus four paired runs reserve **$1.70**. Run one container at a time.
+Before **each** paid command, check Modal Usage and [current prices](https://modal.com/pricing). Then confirm the reservation on the study-plan status board (private study notes). At prices checked, one container reserves **$0.34** (5 min startup + 15 min execution + 1 min idle). One pilot plus four paired runs reserve **$1.70**. Run one container at a time.
 
 ## 3. FP8 compatibility pilot (1 container)
 
@@ -128,8 +128,8 @@ Expect `"status": "completed"`, 1000/1000 tokens, `float8_e4m3fn`, and about 2×
 
 ```bash
 uv run modal run $D/app.py::main --stage final --variant bf16 --input-length 8000 --repeat 1
-uv run modal run $D/app.py::main --stage final --variant fp8  --input-length 8000 --repeat 1
-uv run modal run $D/app.py::main --stage final --variant fp8  --input-length 8000 --repeat 2
+uv run modal run $D/app.py::main --stage final --variant fp8 --input-length 8000 --repeat 1
+uv run modal run $D/app.py::main --stage final --variant fp8 --input-length 8000 --repeat 2
 uv run modal run $D/app.py::main --stage final --variant bf16 --input-length 8000 --repeat 2
 uv run python $D/table.py
 ```
@@ -158,7 +158,7 @@ Each zeroes the pool, generates 32 tokens, and saves per-layer max |K|/|V|, the 
 
 ```bash
 uv run modal app list
-uv run modal billing report --start 2026-10-01 --end 2026-11-01 --json > report.json  # --csv wraps at 80 columns when piped
+uv run modal billing report --start "$START_DATE" --end "$END_DATE" --json > report.json # --csv wraps at 80 columns when piped
 ```
 
 Expect no running `long-context-fp8-kv-cache` app. Record actual app cost on the status board. Append results to `PREDICTION.md` and write `FINDINGS.md`: timing pairs and spread, KV bytes and capacity, quality divergence, and the trace comparison. Report negative or inconclusive outcomes honestly. A single request cannot show higher concurrency capacity. A performance contribution to full SGLang or vLLM needs a separate, pinned reproduction there.

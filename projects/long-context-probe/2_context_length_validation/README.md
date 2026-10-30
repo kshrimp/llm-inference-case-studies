@@ -1,6 +1,6 @@
 # Context-length validation
 
-**Current state:** the six unprofiled 1,000-output runs and three 128-output trace runs completed on 2026-10-23. Read their [findings](FINDINGS.md). The commands in steps 3 and 5 document the completed sequence; they are not a request to rerun it.
+**Current state:** the six unprofiled 1,000-output runs and three 128-output trace runs completed. Read their [findings](FINDINGS.md). The commands in steps 3 and 5 document the completed sequence; they are not a request to rerun it.
 
 This experiment tests the [profiling finding](../1_profile_baseline/FINDINGS.md): with 1,000 output tokens, does a longer starting context increase offline `LLM.generate` time? It uses only unmodified mini-SGLang `9a91cfafe754aa85daee49998176275667eb58f2`. Input lengths are **1,024, 4,096, and 8,000**; output length, seeded token generator, greedy sampling, model, bf16, L4, page size, and CUDA graph setting stay fixed. The largest request is 9,000 total tokens under the configured 9,216-token limit.
 
@@ -25,7 +25,7 @@ Expect help to list `--input-length`, `--repeat`, `--capture-trace`, and `--dry-
 uv run modal app list
 ```
 
-Expect no `long-context-length-validation` app still running. Check current Modal Usage and [pricing](https://modal.com/pricing). Enter the next one-container reservation (**up to $0.34**, at the rate checked 2026-10-23), spend so far, and remaining approved sprint budget in the study-plan status board (private study notes). Stop if the next run would exceed the remaining approval. Six unprofiled commands reserve **$2.04**; three additional short-trace commands reserve **$1.02**, for **$3.06** total if all are run. Execute them sequentially, never concurrently.
+Expect no `long-context-length-validation` app still running. Check current Modal Usage and [pricing](https://modal.com/pricing). Enter the next one-container reservation (**up to $0.34**, at the rate checked before the run), spend so far, and remaining approved sprint budget in the study-plan status board (private study notes). Stop if the next run would exceed the remaining approval. Six unprofiled commands reserve **$2.04**; three additional short-trace commands reserve **$1.02**, for **$3.06** total if all are run. Execute them sequentially, never concurrently.
 
 ## 3. Two repeats at each length
 
@@ -45,7 +45,7 @@ After **each** command, expect `Saved results/long-context-probe/context-length-
 ```bash
 uv run python projects/long-context-probe/2_context_length_validation/table.py
 uv run modal app list
-uv run modal billing report --start 2026-10-01 --end 2026-11-01 --json > report.json  # --csv wraps at 80 columns when piped
+uv run modal billing report --start "$START_DATE" --end "$END_DATE" --json > report.json # --csv wraps at 80 columns when piped
 ```
 
 Expect nine rows with separate repeats, lengths, output counts and hashes, elapsed seconds, and source commit. The six unprofiled runs predate the `measurement` field, so the table shows `unknown` for that field on those records; their recorded 1,000-token counts establish the unprofiled workload. The three newer rows say `trace_128`. Check that output hashes match within each length for the unprofiled repeats; compare repeat spread with the difference among lengths. The billing report has app-level costs, not per-run charges. A later export posted all six original validation charges; refresh again for the three trace-run charges.

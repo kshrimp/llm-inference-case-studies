@@ -1,6 +1,6 @@
-# Experiment 9 findings: a use-after-free in mini-SGLang's prefix cache, confirmed and fixed (2026-10-25)
+# Experiment 9 findings: a use-after-free in mini-SGLang's prefix cache, confirmed and fixed
 
-**Result: confirmed.** In mini-SGLang (pinned `9a91cfaf`, which is also its main branch as of 2026-10-25), `CacheManager.cache_req(req, finished=False)` frees a still-running request's duplicate prefix pages without remapping its page table. Under KV-pool pressure those pages are reallocated to other requests, so the original request attends to someone else's KV. Three independent checks agree:
+**Result: confirmed.** In mini-SGLang (pinned `9a91cfaf`, which is also its main branch at the pinned commit), `CacheManager.cache_req(req, finished=False)` frees a still-running request's duplicate prefix pages without remapping its page table. Under KV-pool pressure those pages are reallocated to other requests, so the original request attends to someone else's KV. Three independent checks agree:
 
 1. A CPU regression test **fails on the current code and passes with the fix**.
 2. An allocation detector shows that **every needle failure in experiment 7 was a victim** of live-page reallocation.
@@ -16,10 +16,10 @@ Reproduce with `uv run python projects/long-context-probe/9_minisgl_prefix_cache
 cached_len, new_handle = self.prefix_cache.insert_prefix(insert_ids, page_indices)
 self.unlock(old_handle)
 # this part is already in the prefix cache, free it
-self._free(page_indices[old_handle.cached_len : cached_len])   # <- request's own pages
+self._free(page_indices[old_handle.cached_len : cached_len]) # <- request's own pages
 ...
-else:  # keep the tail part, update the handle
-    req.cache_handle = new_handle; self.lock(new_handle)       # <- page_table row not remapped
+else: # keep the tail part, update the handle
+ req.cache_handle = new_handle; self.lock(new_handle) # <- page_table row not remapped
 ```
 
 The trigger: several requests share a prefix, are admitted before any of them is cached (so none gets a prefix hit), and are prefilled together. `Scheduler` calls `cache_req(..., finished=False)` for each after prefill. The first request inserts the prefix. For each later one, `insert_prefix` reports the prefix as already present (`cached_len > old_handle.cached_len`), so `cache_req` frees that request's own pages for `[old_handle.cached_len, cached_len)`. The request keeps decoding with its page-table row still pointing at them.
@@ -60,8 +60,8 @@ All 6 baseline failures are recovered, and its text matches the base run on 76/9
 ```python
 duplicate = page_indices[old_handle.cached_len : cached_len].clone()
 if not finished and len(duplicate) > 0:
-    shared = new_handle.get_matched_indices()[old_handle.cached_len : cached_len]
-    page_indices[old_handle.cached_len : cached_len] = shared   # point at the cached copy
+ shared = new_handle.get_matched_indices()[old_handle.cached_len : cached_len]
+ page_indices[old_handle.cached_len : cached_len] = shared # point at the cached copy
 self._free(duplicate)
 ```
 
@@ -71,7 +71,7 @@ self._free(duplicate)
 
 - **mini-SGLang users:** any workload with concurrent shared-prefix requests (system prompts, few-shot templates, RAG with shared context) **and** a nearly full KV pool can silently produce corrupted outputs. It is deterministic for a given workload and scheduler order.
 - **For this project:** experiment 7's FP8 "advantage" and BF16's 6 misses were this bug. FP8 hid it by doubling the pool, which reduced reuse of freed pages.
-- **Contribution direction (updated 2026-10-25):** the user will not open a mini-SGLang PR. The fix and regression test remain local study artifacts in `~/projects/upstream/mini-sglang-cache-fix`, branch `fix-cache-req-uaf`. A full-SGLang contribution would require an independent check of its equivalent path, reproduction on a current pin, and a justified fix. Nothing has been posted.
+- **Contribution direction (updated after validation):** the user will not open a mini-SGLang PR. The fix and regression test remain local study artifacts in `~/projects/upstream/mini-sglang-cache-fix`, branch `fix-cache-req-uaf`. A full-SGLang contribution would require an independent check of its equivalent path, reproduction on a current pin, and a justified fix. Nothing has been posted.
 
 ## Limits
 

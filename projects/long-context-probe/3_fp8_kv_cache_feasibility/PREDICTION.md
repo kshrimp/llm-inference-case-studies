@@ -1,6 +1,6 @@
 # BF16 versus FP8 KV-cache prediction
 
-Written 2026-10-23, **before** any FP8 execution (local or Modal). The user chose to run this experiment before finishing the mini-SGLang map and CPU toy engine, so it is an early exploratory tweak, not the W5 tweak selection. Keep this prediction unchanged; append results below.
+Written, **before** any FP8 execution (local or Modal). The user chose to run this experiment before finishing the mini-SGLang map and CPU toy engine, so it is an early exploratory tweak, not the W5 tweak selection. Keep this prediction unchanged; append results below.
 
 ## Known starting point
 
@@ -14,10 +14,10 @@ Written 2026-10-23, **before** any FP8 execution (local or Modal). The user chos
 ## Feasibility gate
 
 - Source diff: `fp8_kv_cache.patch` changes only the engine dtype selection and page arithmetic, the pool write, and FlashInfer planning. Upstream `store_cache` is a raw byte copy that checks K/V against the cache dtype, so BF16 K/V must be cast before the store.
-- Backend support: FlashInfer 0.7.2.post1 accepts separate `q_data_type` and `kv_data_type` for both the paged prefill and decode wrappers. All GPU execution runs on Modal L4s (user decision, 2026-10-23); the 1,024-token FP8 pilot is the compatibility smoke test.
+- Backend support: FlashInfer 0.7.2.post1 accepts separate `q_data_type` and `kv_data_type` for both the paged prefill and decode wrappers. All GPU execution runs on Modal L4s (user decision); the 1,024-token FP8 pilot is the compatibility smoke test.
 - Quality method: greedy decoding (temperature 0) of fixed natural prompts. Measure the first token where FP8 diverges from BF16 and read the decoded text.
 
-## Prediction (user, 2026-10-23)
+## Prediction (user, before the run)
 
 1. **Decode-attention kernel time per step at ~8,000 context: about 40–50% lower** with FP8. Reason: decode attention is memory-bandwidth-bound, so halving KV bytes nearly halves its time.
 2. **Whole-call time at 8,000 input / 1,000 output: at least 15% faster.**
@@ -40,7 +40,7 @@ Counters needed beyond whole-call time: matched 128-output traces with per-step 
 
 ## Results (append after runs; do not rewrite the prediction)
 
-Runs completed 2026-10-23 on Modal L4. Details, run IDs, and the diagnostic are in [FINDINGS.md](FINDINGS.md).
+Runs completed on Modal L4. Details, run IDs, and the diagnostic are in [FINDINGS.md](FINDINGS.md).
 
 1. Decode attention per step: 3.710 → 2.121 ms (**−42.8%**), inside the predicted 40–50%, but measured on NaN-contaminated KV.
 2. Whole call: BF16 mean 10.230 s, FP8 mean 8.914 s (−12.9%); repeat spreads of 0.74 and 0.88 s. **Not met**, and not a valid speedup because the FP8 output is broken.
@@ -53,13 +53,13 @@ What surprised: the speed mechanism behaved as predicted, while correctness fail
 
 # v2 (saturating cast) prediction
 
-Written 2026-10-24, **before** any `fp8_sat` GPU run. Keep it unchanged; append results below.
+Written, **before** any `fp8_sat` GPU run. Keep it unchanged; append results below.
 
 ## Treatment
 
 [`fp8_kv_cache_v2_saturate.patch`](fp8_kv_cache_v2_saturate.patch) (sha256 `1140df00…`) is the full v1 diff plus a clamp of K and V to `torch.finfo(float8_e4m3fn).max` (448) before the cast in `MHAKVCache.store_kv`. The scale is still 1.0. The runner variant is `fp8_sat`; the BF16 control is the same unmodified-upstream image as v1. Rationale and alternatives: [FINDINGS.md](FINDINGS.md#solutions-considered).
 
-## Prediction (user, 2026-10-24)
+## Prediction (user, before the run)
 
 1. **Quality: all 8 natural prompts stay coherent, with no trailing `!` runs.** They drift from BF16 at points similar to v1's healthy prompts (tokens 5–47) or stay identical.
 2. **Long random prompts: the output becomes prompt-dependent.** The 1,024 and 8,000 hashes differ from each other and from v1's constant `649e407e…`; they may still differ from BF16.
@@ -81,7 +81,7 @@ The diagnostic must show **0 FP8 NaN bytes** for v2 to count as numerically vali
 
 ## v2 results (append after runs; do not rewrite the prediction)
 
-Runs completed 2026-10-24 on Modal L4; details are in [FINDINGS.md](FINDINGS.md#v2-saturating-cast-results-2026-10-24).
+Runs completed on Modal L4; details are in [FINDINGS.md](FINDINGS.md#v2-saturating-cast-results-).
 
 1. Quality: **met.** All 8 prompts are coherent with zero token-`0` runs in both final runs. The first divergences from BF16 are `[5, 15, none, 6, 28, none, 47, 20]`, identical to v1's indexes, so the drift comes from FP8 rounding, not from clipping.
 2. Long prompts: **met.** The 1,024 hash `0941996b…` equals the BF16 1,024 hash, so all 1,000 tokens are identical to BF16. The 8,000 hash `3fb5d39b…` differs from BF16 (`cb86f41c…`), from the pilot, and from v1's constant `649e407e…`.

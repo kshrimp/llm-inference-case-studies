@@ -1,6 +1,6 @@
-# Experiment 5 findings: FP8 KV on the W2 offline throughput benchmark (2026-10-24)
+# Experiment 5 findings: FP8 KV on the W2 offline throughput benchmark
 
-**Update (capacity-matched control, 2026-10-24 evening): most of the gain comes from cheaper attention, not capacity.** With the FP8 pool capped at BF16's 172,544 tokens, batching is identical to BF16 (decode batch max 119, 1,940 steps) and throughput is still **+47.6%** (1,813 → 2,676 tok/s). The doubled capacity adds a further **+10.5%** (→ 2,956 tok/s). See [the control](#capacity-matched-control-splits-the-gain).
+**Update (capacity-matched control, evening): most of the gain comes from cheaper attention, not capacity.** With the FP8 pool capped at BF16's 172,544 tokens, batching is identical to BF16 (decode batch max 119, 1,940 steps) and throughput is still **+47.6%** (1,813 → 2,676 tok/s). The doubled capacity adds a further **+10.5%** (→ 2,956 tok/s). See [the control](#capacity-matched-control-splits-the-gain).
 
 **Result: storing KV in FP8 (saturating v2 patch) raised mini-SGLang's offline throughput on the sprint's W2 benchmark by 62.6%, from 1,818 to 2,956 tok/s (two runs each, order BF16, FP8, FP8, BF16).** The KV pool's token capacity doubled (172,544 → 345,344), the scheduler admitted twice as many concurrent requests (decode batch max 119 → 238), and the number of decode steps fell from 1,940 to 1,182. This is **offline throughput** for one workload on one L4, not serving latency.
 
@@ -16,7 +16,7 @@ Reproduce every number below with `uv run python projects/long-context-probe/5_f
 | 4 | BF16 | 172,544 | 133,966 / 133,966 | 73.578 | 1,820.75 | 1,940 | 119 / 68.92 | `20261024T052940Z-bench-bf16-r2` |
 
 - **Throughput:** BF16 mean 1,818.16 tok/s (runs 5.2 tok/s apart); FP8 mean 2,956.34 tok/s (41.9 tok/s apart). **+62.6%**. The larger repeat spread is under 4% of the difference.
-- **Baseline consistency:** the BF16 control is within 1% of the W2 baseline recorded on 2026-10-20 (1,798.23 and 1,807.57 tok/s) under the older dependency set, so the newly pinned dependencies did not shift the baseline materially.
+- **Baseline consistency:** the BF16 control is within 1% of the W2 baseline recorded on (1,798.23 and 1,807.57 tok/s) under the older dependency set, so the newly pinned dependencies did not shift the baseline materially.
 - **Mechanism:** the first decode batches were 119 requests in BF16 and 238 in FP8, exactly 2×. The scheduler is deterministic: the step counts and batch statistics are identical across repeats. With more requests per step, each decode step amortizes the per-step weight reads (GEMV) over more tokens, so the run finishes in 39% fewer steps.
 
 ## Capacity-matched control splits the gain
@@ -40,7 +40,7 @@ All 133,966 / 133,966 requested tokens were generated in every run.
 ## What this does and does not show
 
 - The capacity-matched control separates the two factors: about +47.6% from cheaper attention and about +10.5% from more concurrency (multiplicative, on this workload).
-- **Accuracy (2026-10-24):** on 200 held-out arithmetic problems through the chat template (greedy), FP8 v2 scored **180/200 (90.0%)** against BF16's **182/200 (91.0%)**. Their text was identical on 174 problems, and the 4-vs-2 correctness disagreement is within noise (exact McNemar p ≈ 0.69). FP8 v1 scored 1/200, with every output corrupted. See [experiment 3 findings](../3_fp8_kv_cache_feasibility/FINDINGS.md#accuracy-eval-2026-10-24). Quality under this benchmark's temperature-0.6 sampling was not measured directly.
+- **Accuracy:** on 200 held-out arithmetic problems through the chat template (greedy), FP8 v2 scored **180/200 (90.0%)** against BF16's **182/200 (91.0%)**. Their text was identical on 174 problems, and the 4-vs-2 correctness disagreement is within noise (exact McNemar p ≈ 0.69). FP8 v1 scored 1/200, with every output corrupted. See [experiment 3 findings](../3_fp8_kv_cache_feasibility/FINDINGS.md#accuracy-eval-). Quality under this benchmark's temperature-0.6 sampling was not measured directly.
 - This is a single model, GPU, and workload, offline only. Client-observed serving latency and time-to-first-token were not measured.
 
 ## Next steps

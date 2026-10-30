@@ -1,6 +1,6 @@
 # Experiment 2 findings
 
-## Step 2a: FP8 smoke and gate (2026-10-28)
+## Step 2a: FP8 smoke and gate
 
 ### What ran
 
@@ -44,11 +44,11 @@ A's 4.455 ms/token matches experiment 1 (4.449–4.456), so the reference is sta
 ### What this shows
 
 1. **FP8 is slower at batch 1 on this stack, by 46–50%.** That refutes the agent's revised expectation of 3.4–3.9 ms/token. FP8 halves the weight bytes, yet each decode step takes about 2.1 ms longer. So the FP8 kernels lose more time than the halved bytes save. The server log names the FP8 path:
-   - **CUTLASS** for the MoE experts (`moe_runner_backend=cutlass`, which SGLang-Omni chooses automatically for native block-FP8 checkpoints).
-   - **Triton** for the dense FP8 GEMMs (`fp8_gemm_backend=triton`). Upstream's comment says it chose Triton over DeepGEMM for 3–6% more throughput at concurrency 1 and 16; the comparison was against DeepGEMM, not BF16.
-   - SGLang warns at startup: `Using default W8A8 Block FP8 kernel config. Performance might be sub-optimal! Config file not found … N=2048,K=4096,device_name=NVIDIA_H100_80GB_HBM3,dtype=fp8_w8a8,block_shape=[128, 128].json` (and other shapes). So the dense FP8 GEMMs run with untuned default tiles.
+ - **CUTLASS** for the MoE experts (`moe_runner_backend=cutlass`, which SGLang-Omni chooses automatically for native block-FP8 checkpoints).
+ - **Triton** for the dense FP8 GEMMs (`fp8_gemm_backend=triton`). Upstream's comment says it chose Triton over DeepGEMM for 3–6% more throughput at concurrency 1 and 16; the comparison was against DeepGEMM, not BF16.
+ - SGLang warns at startup: `Using default W8A8 Block FP8 kernel config. Performance might be sub-optimal! Config file not found … N=2048,K=4096,device_name=NVIDIA_H100_80GB_HBM3,dtype=fp8_w8a8,block_shape=[128, 128].json` (and other shapes). So the dense FP8 GEMMs run with untuned default tiles.
 
-   Which kernels lose the time is **not yet measured**: 2a has no trace.
+ Which kernels lose the time is **not yet measured**: 2a has no trace.
 2. **FP8 is a large capacity win.** At the same memory fraction, FP8 weights free 27.7 GB. The KV pool grows from 25,161 to 327,945 tokens (BF16 KV) or 655,891 tokens (FP8 KV). That is about 36 or 72 concurrent 9,000-token requests instead of 2. Under load, the per-token penalty may be repaid by batching; experiment 4 measures this.
 3. **FP8 KV reaches the thinker and stores e4m3**, and the CUDA cast saturates. The torch ≤ 2.12 overflow from the old project does not occur. At batch 1, C is 0.14 ms/token slower than B; the cost of FP8 attention is not yet attributed.
 4. **TTFT is unchanged** (167–177 ms): an 8k prefill is compute-bound, and FP8 does not change it here.
@@ -78,7 +78,7 @@ If no backend choice brings FP8 to at least BF16 speed at batch 1, the customer 
 - The FP8 checkpoint is a community conversion; its quality is not Qwen's claim.
 - FP8 uses `mem_fraction_static=0.784` (experiment 1's BF16 value), not upstream's colocated FP8 YAML. The KV pool sizes above depend on that choice.
 
-## Step 2b-1: why FP8 is slower, by backend (2026-10-28/29)
+## Step 2b-1: why FP8 is slower, by backend (/29)
 
 ### What ran
 
@@ -114,14 +114,14 @@ A matches experiment 1 and 2a (4.449–4.461), so there is no drift across three
 ### What this shows
 
 1. **The default FP8 path loses in all three places.**
-   - Dense FP8 GEMMs on Triton with untuned default tiles take 2.24 ms, against 1.39 ms for BF16 cuBLAS, even though they read half the bytes.
-   - The CUTLASS MoE path takes 2.26 ms, against 1.83 ms for BF16 Triton fused MoE.
-   - The CUTLASS path also leaves the GPU idle 0.66–0.76 ms per step, inside the CUDA graph (the graph span grows with it).
+ - Dense FP8 GEMMs on Triton with untuned default tiles take 2.24 ms, against 1.39 ms for BF16 cuBLAS, even though they read half the bytes.
+ - The CUTLASS MoE path takes 2.26 ms, against 1.83 ms for BF16 Triton fused MoE.
+ - The CUTLASS path also leaves the GPU idle 0.66–0.76 ms per step, inside the CUDA graph (the graph span grows with it).
 
-   The step goes from 820 to 1,300 kernels. Per layer, that adds four activation-quantization kernels and the CUTLASS MoE's setup and permute kernels: problem sizes, expert offsets, argument sorts, row shuffles, a fill, a copy, and the scatter-sum.
+ The step goes from 820 to 1,300 kernels. Per layer, that adds four activation-quantization kernels and the CUTLASS MoE's setup and permute kernels: problem sizes, expert offsets, argument sorts, row shuffles, a fill, a copy, and the scatter-sum.
 2. **Each part has a better backend at batch 1.**
-   - **DeepGEMM** for dense cuts dense GEMM from 2.24 to 1.27 ms, 8% *below* BF16 cuBLAS.
-   - **Triton fused MoE** with FP8 cuts MoE from 2.26 to 1.42 ms (22% below BF16) and removes the idle gap (0.11 ms, as in BF16).
+ - **DeepGEMM** for dense cuts dense GEMM from 2.24 to 1.27 ms, 8% *below* BF16 cuBLAS.
+ - **Triton fused MoE** with FP8 cuts MoE from 2.26 to 1.42 ms (22% below BF16) and removes the idle gap (0.11 ms, as in BF16).
 3. **Untested prediction for the combination** (DeepGEMM dense + Triton MoE): about 5.087 − (2.241 − 1.270) ≈ **4.1 ms/token, about 8% faster than BF16**. The two changes act on different categories, so their savings should roughly add up. 2b-2 tests this.
 4. **Why upstream chose the default, and what this does and does not contradict.** SGLang-Omni's policy comment says Triton dense GEMM gave "3 to 6 percent more throughput" than DeepGEMM "at c1 and c16 … over 5000 MMSU prompts, and no post-ready compiles". MMSU prompts are short, prefill-heavy requests with variable shapes, where DeepGEMM's per-shape JIT compiles hurt. This experiment is 8k-context decode with 1,000 output tokens, where decode is 96% of the time. Both can be true. **The right FP8 backend depends on the workload**, and the automatic choice is not the fastest for long-output decode at batch 1. No compile spike appeared on the first 8k request with DeepGEMM (TTFT 160.9 ms), but only one prompt length was tested.
 5. **FP8 KV is not involved here** (all sessions use BF16 KV). Attention time is the same as BF16 within 0.04 ms.
@@ -140,7 +140,7 @@ One container, $3.39 ceiling:
 - **Quality set** on A and B_combined: 60 needle-retrieval items at about 2k, 4k, and 8k tokens (keys generated in-container from a fixed seed and stored in the record), plus the 3 free-generation prompts. The varied prompt lengths also exercise DeepGEMM's per-shape compiles; per-request TTFT is recorded.
 - **8 concurrent 8k/1k requests** on B_combined and B_default (both have a 328k-token KV pool), comparing total output tok/s. This checks whether the batch-1 ranking holds when the batch grows; upstream's choice was measured at concurrency 16.
 
-## Step 2b-2: the combined FP8 configuration (2026-10-29)
+## Step 2b-2: the combined FP8 configuration
 
 ### What ran
 
@@ -166,7 +166,7 @@ The needle items come from a fixed seed (1234): 20 each at 1,500, 3,000, and 6,0
 
 The agent's prediction from 2b-1 (about 4.1 ms/token) held: 4.122. Step anatomy of B_combined (median ms): dense GEMM 1.262, MoE 1.428, attention 0.942, FP8 quant 0.197, norm 0.202, other 0.091, idle 0.097. These are the dense number from B_deepgemm and the MoE number from B_moe_triton, so the two backend changes add up as expected.
 
-**The cost upstream warned about is real.** On B_combined, needle requests 1 and 6 of the 2k group took 0.461 s and 0.981 s, against a 0.083 s median for that group. Every later request at every length was normal (4k max 0.122 s, 8k max 0.203 s). BF16 had no such outliers (max 0.100 s at 2k). This pattern fits DeepGEMM compiling kernels for new prefill shapes after the server is ready (SGLang-Omni sets `SGLANG_JIT_DEEPGEMM_PRECOMPILE=0`), which is the reason upstream gives for preferring Triton dense GEMMs. The server log has no compile line, so it is consistent with that cause but not proven. **Corrected in 2c (2026-10-30):** the same two requests were slow (0.41 and 0.37 s) with Triton dense GEMMs and no DeepGEMM, so DeepGEMM is not the only cause; see step 2c.
+**The cost upstream warned about is real.** On B_combined, needle requests 1 and 6 of the 2k group took 0.461 s and 0.981 s, against a 0.083 s median for that group. Every later request at every length was normal (4k max 0.122 s, 8k max 0.203 s). BF16 had no such outliers (max 0.100 s at 2k). This pattern fits DeepGEMM compiling kernels for new prefill shapes after the server is ready (SGLang-Omni sets `SGLANG_JIT_DEEPGEMM_PRECOMPILE=0`), which is the reason upstream gives for preferring Triton dense GEMMs. The server log has no compile line, so it is consistent with that cause but not proven. **Corrected in 2c:** the same two requests were slow (0.41 and 0.37 s) with Triton dense GEMMs and no DeepGEMM, so DeepGEMM is not the only cause; see step 2c.
 
 **Quality:** 60/60 for both A and B_combined (Wilson 95% interval for 60/60: 94.0–100%). The test can detect a large loss, not a small one. The free-generation outputs are in the record.
 
@@ -186,9 +186,9 @@ The agent's prediction from 2b-1 (about 4.1 ms/token) held: 4.122. Step anatomy 
 
 ### Possible upstream contribution
 
-A focused issue for SGLang-Omni: for Qwen3-Omni FP8 on H100, long-output decode at batch 1, the automatic policy (`cutlass` MoE + `triton` dense) is 58% slower than `triton` MoE + `deep_gemm` dense (6.52 vs 4.12 ms/token), with traces attributing the gap. Plus the missing W8A8 block-FP8 tuning configs for these shapes. It should be framed as workload-dependent, citing the policy's own MMSU/c16 rationale, and should ask whether the policy should depend on output length or be documented. **Drafted 2026-10-29:** UPSTREAM_ISSUE_DRAFT.md (private draft), after searching existing issues (#454, #583, #2040, #711, #797 are related; none covers it). Not posted.
+A focused issue for SGLang-Omni: for Qwen3-Omni FP8 on H100, long-output decode at batch 1, the automatic policy (`cutlass` MoE + `triton` dense) is 58% slower than `triton` MoE + `deep_gemm` dense (6.52 vs 4.12 ms/token), with traces attributing the gap. Plus the missing W8A8 block-FP8 tuning configs for these shapes. It should be framed as workload-dependent, citing the policy's own MMSU/c16 rationale, and should ask whether the policy should depend on output length or be documented. **Drafted :** UPSTREAM_ISSUE_DRAFT.md (private draft), after searching existing issues (#454, #583, #2040, #711, #797 are related; none covers it). Not posted.
 
-## Step 2c: can tuned Triton dense GEMMs replace DeepGEMM? (2026-10-30)
+## Step 2c: can tuned Triton dense GEMMs replace DeepGEMM?
 
 ### Why
 

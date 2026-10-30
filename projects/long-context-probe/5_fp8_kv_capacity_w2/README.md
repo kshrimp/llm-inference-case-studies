@@ -16,8 +16,8 @@ Experiment 3 measured one request, so the doubled pool did nothing there. In pin
 
 ## What we did
 
-1. **Full-capacity comparison (2026-10-24 morning):** BF16, FP8, FP8, BF16, one container each, on the W2 workload. FP8 got its natural 2× pool (345,344 tokens).
-2. **Capacity-matched control (2026-10-24 evening):** BF16, FP8 capped at BF16's 674 pages (`fp8_sat_capmatch`), FP8 capped, BF16. With the same pool, the scheduler makes the same batches, so any remaining gain comes from cheaper attention alone.
+1. **Full-capacity comparison ( morning):** BF16, FP8, FP8, BF16, one container each, on the W2 workload. FP8 got its natural 2× pool (345,344 tokens).
+2. **Capacity-matched control ( evening):** BF16, FP8 capped at BF16's 674 pages (`fp8_sat_capmatch`), FP8 capped, BF16. With the same pool, the scheduler makes the same batches, so any remaining gain comes from cheaper attention alone.
 3. Rebuilt both tables with [`table.py`](table.py) and split the gain into its attention and capacity parts. Accuracy came from experiment 3's arithmetic check.
 
 ## How to run

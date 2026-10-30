@@ -1,6 +1,6 @@
 # Experiment 1: one-request stage breakdown
 
-**Status:** planned. Container B follows the [project smoke gate](../README.md#container-a-gpu-smoke-and-decision). Settings frozen 2026-10-26 ([project README](../README.md#frozen-settings-for-b-accepted-2026-10-26)); no user prediction (waived).
+**Status:** planned. Container B follows the [project smoke gate](../README.md#container-a-gpu-smoke-and-decision). Settings frozen ([project README](../README.md#frozen-settings-for-b-accepted-)); no user prediction (waived).
 
 ## Question
 
@@ -21,7 +21,7 @@ Each `audio_mid` request (warmup included) uses its own manifest variant (`aow_0
 
 Fill this in Step 0 from the pinned `8200f499` source, then verify against A's raw event JSONL. Each row gets a file:symbol reference, actual event fields and clock. A blank or absent event remains unsupported; the example names below are **candidates**, not promised measurements.
 
-Source columns filled 2026-10-25 from the pinned source (paths relative to the sglang-omni repo). The smoke-evidence column stays empty until container A. Text-only topology (`sglang_omni/models/qwen3_omni/config.py::text_stages`): `preprocessing → {image_encoder, audio_encoder} → mm_aggregate → thinker → decode`, all six stages in **one process named `pipeline` on GPU 0**. The coordinator runs in the server process. `decode` is the terminal **detokenizer** stage, not thinker decoding. Every event is stamped with `time.time_ns()` (wall clock, `sglang_omni/profiler/event_recorder.py::emit`), so stamps from the two processes in one container share a clock. The client records both `time.time_ns()` and `time.monotonic_ns()` at dispatch so client times can be placed on the event timeline.
+Source columns filled from the pinned source (paths relative to the sglang-omni repo). The smoke-evidence column stays empty until container A. Text-only topology (`sglang_omni/models/qwen3_omni/config.py::text_stages`): `preprocessing → {image_encoder, audio_encoder} → mm_aggregate → thinker → decode`, all six stages in **one process named `pipeline` on GPU 0**. The coordinator runs in the server process. `decode` is the terminal **detokenizer** stage, not thinker decoding. Every event is stamped with `time.time_ns()` (wall clock, `sglang_omni/profiler/event_recorder.py::emit`), so stamps from the two processes in one container share a clock. The client records both `time.time_ns()` and `time.monotonic_ns()` at dispatch so client times can be placed on the event timeline.
 
 | Interval | Candidate start | Candidate end | Process / clock | Pinned source | Smoke evidence |
 | --- | --- | --- | --- | --- | --- |

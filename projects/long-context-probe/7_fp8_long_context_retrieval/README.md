@@ -20,11 +20,11 @@ All FP8 quality evidence so far came from short contexts: 8 fixtures and 200 ari
 - mini-SGLang prefill is paged, so it reads the prompt's K/V back from the FP8 cache. FP8 error therefore affects prefill attention as well as decode.
 - One container per variant: BF16 and fp8_sat. The test is deterministic, so no repeats.
 
-**Checked locally on CPU (2026-10-24)** with the pinned Qwen3 tokenizer: 90 prompts, all under the 9,216-token engine limit, the 50%-depth needle at 0.49 of the text, and thinking disabled in the template.
+**Checked locally on CPU** with the pinned Qwen3 tokenizer: 90 prompts, all under the 9,216-token engine limit, the 50%-depth needle at 0.49 of the text, and thinking disabled in the template.
 
 **Expected signal (agent-written).** BF16 retrieval should be high at 2k and may fall at 8k for a 0.6B model. If FP8 matches BF16 within a few prompts, v3 is not needed for this model. A depth- or length-specific FP8 gap would justify v3.
 
-**7b ablation (added 2026-10-25 after BF16 missed 6 prompts that FP8 got right).** Four more containers isolate the cause: a BF16 repeat (determinism), BF16 with `cache_type="naive"` (no prefix-cache reuse), BF16 on only the 30 ~2k prompts (no pool pressure), and FP8 with its pool capped at BF16's 674 pages (dtype vs admission pattern). These are `NEEDLE_ABLATIONS` in the runner.
+**7b ablation (added after BF16 missed 6 prompts that FP8 got right).** Four more containers isolate the cause: a BF16 repeat (determinism), BF16 with `cache_type="naive"` (no prefix-cache reuse), BF16 on only the 30 ~2k prompts (no pool pressure), and FP8 with its pool capped at BF16's 674 pages (dtype vs admission pattern). These are `NEEDLE_ABLATIONS` in the runner.
 
 ## How to run
 

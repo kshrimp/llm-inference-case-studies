@@ -14,7 +14,7 @@ Experiment 7b showed that BF16's needle failures were deterministic, independent
 4. **9a detector:** reran the BF16 needle workload with an observe-only `_allocate` wrapper that flags any newly allocated page still referenced by a running request. Every experiment-7 failure turned out to be a victim.
 5. **9b fix:** reran the BF16 needle workload on the fixed image: 84/90 → 90/90.
 
-**Suspected mechanism** (source reading, pinned `9a91cfaf`, which is also mini-SGLang main as of 2026-10-25):
+**Suspected mechanism** (source reading, pinned `9a91cfaf`, which is also mini-SGLang main at the pinned commit):
 1. Several requests with the **same prefix** are prefilled in one batch. None had a cache hit at admission, so each wrote its own pages.
 2. After prefill, `Scheduler` calls `cache_manager.cache_req(req, finished=False)` for each. The first inserts the prefix into the radix tree. For the next one, `insert_prefix` finds the prefix already present, so `cache_req` frees that request's duplicate pages, `[old_handle.cached_len, cached_len)`.
 3. The request keeps decoding, but **its `page_table` row still points to the freed pages**. Nothing remaps it to the tree's copy.
@@ -36,10 +36,10 @@ Run from the repository root. `bash projects/long-context-probe/9_minisgl_prefix
 ```bash
 cd /path/to/llm-inference-case-studies
 A=projects/long-context-probe/3_fp8_kv_cache_feasibility/app.py
-uv run modal run $A::main --stage unittest --variant bf16_testonly           # 9-unit: test only, expect FAIL
-uv run modal run $A::main --stage unittest --variant bf16_cachefix           # 9-unit: test + fix, expect PASS
+uv run modal run $A::main --stage unittest --variant bf16_testonly # 9-unit: test only, expect FAIL
+uv run modal run $A::main --stage unittest --variant bf16_cachefix # 9-unit: test + fix, expect PASS
 uv run modal run $A::main --stage needle --variant bf16_uafdetect --repeat 1 # 9a: live-page reuse detector
-uv run modal run $A::main --stage needle --variant bf16_cachefix --repeat 1  # 9b: fixed engine
+uv run modal run $A::main --stage needle --variant bf16_cachefix --repeat 1 # 9b: fixed engine
 uv run python projects/long-context-probe/9_minisgl_prefix_cache_uaf/table.py
 uv run modal app list
 ```

@@ -1,8 +1,8 @@
-# Experiment 1 findings: text control vs 30 s audio, 2026-10-26
+# Experiment 1 findings: text control vs 30 s audio
 
 ## What ran
 
-Two independent H100 containers ran the same frozen sequence (see the [project README](../README.md#frozen-settings-for-b-accepted-2026-10-26)): B `20261026T042009Z-e01cd44e-measure` and C `20261026T130358Z-7a636d0b-measure`. Both used sglang-omni `8200f499` with Qwen3-Omni-30B-A3B-Instruct BF16 in text-only mode. The thinker radix cache was off, and every thinker prefill in both server logs shows `#cached-token: 0`. Every request was preceded by a warmup for its path. In each container the order was text, audio, audio, text. Output was greedy and capped at 32 tokens.
+Two independent H100 containers ran the same frozen sequence (see the [project README](../README.md#frozen-settings-for-b-accepted-)): B `20261026T042009Z-e01cd44e-measure` and C `20261026T130358Z-7a636d0b-measure`. Both used sglang-omni `8200f499` with Qwen3-Omni-30B-A3B-Instruct BF16 in text-only mode. The thinker radix cache was off, and every thinker prefill in both server logs shows `#cached-token: 0`. Every request was preceded by a warmup for its path. In each container the order was text, audio, audio, text. Output was greedy and capped at 32 tokens.
 
 The two conditions had the **same thinker prompt length, 409 tokens**:
 - `text_control`: "Repeat this text exactly:" plus the first 262 words of the Gutenberg passage, sized in the container by server-counted probes (both containers chose 262 words → 409 tokens).

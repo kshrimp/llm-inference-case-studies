@@ -1,4 +1,4 @@
-# Experiment 7 findings: long-context retrieval with FP8 KV (2026-10-25)
+# Experiment 7 findings: long-context retrieval with FP8 KV
 
 **Result: no FP8 quality loss on needle retrieval, and the apparent FP8 advantage was an engine artifact.** First run: saturated FP8 scored 90/90, BF16 84/90. The 7b ablation showed that BF16's 6 misses are deterministic, need **both** radix prefix-cache reuse **and** KV-pool pressure, and are **not dtype-specific**. FP8 with its pool capped to BF16's size fails the same prompts (83/90). The behavior points to a mini-SGLang prefix-cache bug, investigated in [experiment 9](../9_minisgl_prefix_cache_uaf/README.md). Under equal conditions FP8 matches BF16 (83 vs 84 of 90, identical text on 83/90), so long-context retrieval gives **no reason to build v3 per-layer scales**.
 

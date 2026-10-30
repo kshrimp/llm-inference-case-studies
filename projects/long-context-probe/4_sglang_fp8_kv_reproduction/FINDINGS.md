@@ -1,6 +1,6 @@
-# Experiment 4 findings: SGLang has the same latent FP8 overflow, masked by its decode-kernel choice (2026-10-24)
+# Experiment 4 findings: SGLang has the same latent FP8 overflow, masked by its decode-kernel choice
 
-**Update 2026-10-25 ([experiment 8](../8_sglang_fp8_upstream_check/FINDINGS.md)):** the NaN-on-overflow cast is PyTorch behavior through **2.12.0**. From **2.13.0**, eager BF16 → e4m3fn casts saturate to ±448 on CPU and CUDA. Everything below holds for SGLang 0.5.9, which ships torch 2.9.1. SGLang main pins torch 2.14.1, so its unclamped MHA writer is safe at runtime, and the "latent bug" applies to releases that ship torch ≤ 2.12. The upstream comment draft was rewritten accordingly.
+**Update ([experiment 8](../8_sglang_fp8_upstream_check/FINDINGS.md)):** the NaN-on-overflow cast is PyTorch behavior through **2.12.0**. From **2.13.0**, eager BF16 → e4m3fn casts saturate to ±448 on CPU and CUDA. Everything below holds for SGLang 0.5.9, which ships torch 2.9.1. SGLang main pins torch 2.14.1, so its unclamped MHA writer is safe at runtime, and the "latent bug" applies to releases that ship torch ≤ 2.12. The upstream comment draft was rewritten accordingly.
 
 **Result.** SGLang 0.5.9 with `--kv-cache-dtype fp8_e4m3` and default scale 1.0 writes the **same NaN bytes** into its KV cache as mini-SGLang v1: layer-0 K reaches 516, and 8 values exceed about 464. Its default output is still correct, because SGLang always decodes FP8 KV with FlashInfer's **tensor-core** kernel, which tolerates those bytes. When the documented `SGLANG_FLASHINFER_USE_TENSOR_CORE=false` forces the **CUDA-core** decode kernel (the one mini-SGLang uses for Qwen3-0.6B), SGLang fails **byte-for-byte like mini-SGLang v1**: output hash `649e407e`, 999/1,000 tokens equal to `0`, and the same two fixtures collapsing with the same counts (70 and 89).
 
@@ -46,7 +46,7 @@ The probe-patched image logs layer-0 max |K| right before the cast, on eager cal
 
 Prefill is also consistent: mini-SGLang v1's first token was always correct, even though its paged prefill (a tensor-core FA2 kernel) read the NaN-containing cache. The failure starts at the first CUDA-core decode step. **Hypothesis, not verified:** FlashInfer's tensor-core path dequantizes FP8 with a bit-manipulation conversion that maps the e4m3fn NaN encoding (`0x7F`/`0xFF`) to a finite value, while the CUDA-core decode path converts it to a real NaN. Confirming this needs a FlashInfer source reading or a kernel-level test.
 
-## 6. The saturating clamp fixes SGLang (`20261024T182626Z-sat-fp8_e4m3_cudacore-fp8_e4m3.json`, 2026-10-24)
+## 6. The saturating clamp fixes SGLang (`20261024T182626Z-sat-fp8_e4m3_cudacore-fp8_e4m3.json`)
 
 The `sat` image clamps K/V to ±448 before the cast in the installed 0.5.9 `MHATokenToKVPool.set_kv_buffer` (study patch, mirroring PR #41732's MLA change). One container ran:
 
@@ -67,10 +67,10 @@ The `sat` image clamps K/V to ±448 before the cast in the installed 0.5.9 `MHAT
 
 ## Next steps
 
-1. ~~Run the clamp fix in SGLang with CUDA-core decode forced.~~ **Done 2026-10-24; it passed** (section 6). The earlier hold was a billing-report artifact: CSV output wraps at 80 columns, and the JSON report showed $1.07 actual spend.
+1. ~~Run the clamp fix in SGLang with CUDA-core decode forced.~~ **Done; it passed** (section 6). The earlier hold was a billing-report artifact: CSV output wraps at 80 columns, and the JSON report showed $1.07 actual spend.
 2. **SGLang main (source only, `773cb938`):** the source is unchanged, but main pins torch 2.14.1, whose cast saturates ([experiment 8](../8_sglang_fp8_upstream_check/FINDINGS.md)), so it is not affected at runtime. `MHATokenToKVPool.set_kv_buffer` still casts without saturation, and `should_use_tensor_core` still forces tensor-core decode for FP8 with the same `SGLANG_FLASHINFER_USE_TENSOR_CORE` override. Main has not been run; a runtime check needs a newer image (an optional, paid step).
 3. **Upstream (the user's decision):** post the evidence (sections 4–6 and the experiment-3 diagnostic) as a comment on #41732, asking whether to extend the fix to `MHATokenToKVPool.set_kv_buffer` there or in a follow-up PR. Keep the claim narrow: Qwen3-0.6B, L4, SGLang 0.5.9, scale 1.0, CUDA-core decode. A comment is drafted in UPSTREAM_COMMENT_DRAFT.md (private draft). Nothing has been posted.
 
 ## Cost
 
-This experiment ran four GPU containers (base, cast probe, K probe, CUDA-core run) plus a no-GPU image-source check and two CPU image builds. The worst-case reservations are on the status board. The billing report at about 05:40 UTC was malformed and showed most new apps at $0.0; only `fp8-cast-probe` had posted, at $0.0048. All apps were stopped. Reconciled with `--json` on 2026-10-24: this app's total is $0.228946, including the section-6 run ($0.059).
+This experiment ran four GPU containers (base, cast probe, K probe, CUDA-core run) plus a no-GPU image-source check and two CPU image builds. The worst-case reservations are on the status board. The billing report at about 05:40 UTC was malformed and showed most new apps at $0.0; only `fp8-cast-probe` had posted, at $0.0048. All apps were stopped. Reconciled with `--json` on : this app's total is $0.228946, including the section-6 run ($0.059).

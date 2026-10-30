@@ -1,7 +1,7 @@
 # Serving Qwen3-Omni on Modal for long text inputs: recommendation
 
 **For:** a team planning to serve Qwen3-Omni-30B-A3B on Modal for requests of about 8,000 input and 1,000 output tokens (text in, text out).
-**Basis:** measurements on one Modal H100 (80 GB) with SGLang-Omni `305273a6`, 2026-10-28 to 2026-10-30. Every number below links to the experiment that produced it.
+**Basis:** measurements on one Modal H100 (80 GB) with SGLang-Omni `305273a6`. Every number below links to the experiment that produced it.
 
 ## Recommendation in one paragraph
 
@@ -11,9 +11,9 @@ Run the **FP8 checkpoint with two backend flags and a raised memory fraction**. 
 
 ```bash
 sgl-omni serve --model-path marksverdhei/Qwen3-Omni-30B-A3B-FP8 --text-only \
-  --thinker.engine.mem_fraction_static 0.90 \
-  --thinker.engine.fp8_gemm_runner_backend deep_gemm \
-  --thinker.engine.moe_runner_backend triton
+ --thinker.engine.mem_fraction_static 0.90 \
+ --thinker.engine.fp8_gemm_runner_backend deep_gemm \
+ --thinker.engine.moe_runner_backend triton
 ```
 
 | Setting | Why |

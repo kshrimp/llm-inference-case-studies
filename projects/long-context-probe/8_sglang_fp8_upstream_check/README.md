@@ -14,7 +14,7 @@ Experiment 4 was run on SGLang 0.5.9, but upstream fixes land on main. A PR or i
 4. Rewrote experiment 4's upstream comment draft: SGLang main is not affected at runtime, and the bug is specific to releases that ship torch ≤ 2.12.
 
 **Design (no engine GPU runs).**
-1. **Source reading:** SGLang main at `773cb938fe9484a8f7e7e46fb1b1fe96412c59ed` (2026-10-25), covering `memory_pool.py`, `flashinfer_backend.py::should_use_tensor_core`, the `saturate_to_fp8_range` helper and its docstring, and the torch pin in `python/pyproject.toml`. Plus PR #41732's diff, review state, and CI.
+1. **Source reading:** SGLang main at `773cb938fe9484a8f7e7e46fb1b1fe96412c59ed`, covering `memory_pool.py`, `flashinfer_backend.py::should_use_tensor_core`, the `saturate_to_fp8_range` helper and its docstring, and the torch pin in `python/pyproject.toml`. Plus PR #41732's diff, review state, and CI.
 2. **CPU bisect:** [`torch_cpu_bisect.sh`](torch_cpu_bisect.sh) installs each torch release into a throwaway venv (CPU wheel) and casts 450 / 464 / 470 / 516 / −516 from BF16 to e4m3fn.
 3. **CUDA check:** [`cast_probe_torch_versions.py`](cast_probe_torch_versions.py) runs the same cast on an L4 with torch 2.12.0 and 2.14.1 (cu130 wheels), contiguous, strided, and float32-source. It uses two small containers in sequence, with a $0.21 worst-case reservation each.
 

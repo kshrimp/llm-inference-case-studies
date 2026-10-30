@@ -1,4 +1,4 @@
-# Experiment 8 findings: PyTorch fixed the eager overflow in 2.13, so SGLang main is not affected (2026-10-25)
+# Experiment 8 findings: PyTorch fixed the eager overflow in 2.13, so SGLang main is not affected
 
 **Result: the NaN failure from experiments 3–4 depends on the PyTorch version.** PyTorch's BF16 → `float8_e4m3fn` cast returns **NaN** for finite values above about 464 through **2.12.0**, and **saturates to ±448 from 2.13.0** on both CPU and CUDA. SGLang main pins torch **2.14.1**, so its unclamped `MHATokenToKVPool.set_kv_buffer` is safe at runtime. The reproduced bug affects SGLang releases that ship torch ≤ 2.12, such as **0.5.9 (torch 2.9.1)**, the version this project pins. There is no strong case for a new SGLang PR. The useful upstream contribution is narrower: telling PR #41732's author that its Python-path changes are runtime no-ops on main's torch, while its CUDA intrinsic change does matter.
 
@@ -17,16 +17,16 @@
 
 The change lies between 2.12.0 and 2.13.0. The exact upstream PyTorch commit was not identified.
 
-## 2. SGLang main (source, `773cb938`, 2026-10-25)
+## 2. SGLang main (source at `773cb938`)
 
 - `MHATokenToKVPool.set_kv_buffer` still divides by an optional scale and then calls plain `cache_k.to(self.dtype)`, with no explicit clamp.
 - `should_use_tensor_core` still forces tensor-core decode for FP8 KV and still honors `SGLANG_FLASHINFER_USE_TENSOR_CORE`.
 - `saturate_to_fp8_range`'s docstring says "`float8_e4m3fn` saturates to its max finite value", and that only `float8_e4m3fnuz` returns NaN on overflow. That is **true for torch ≥ 2.13** (main pins `torch==2.14.1`) and **false for torch ≤ 2.12**, including SGLang 0.5.9's 2.9.1.
 - Net: on main, the regular MHA writer saturates through PyTorch itself, and only the explicitly saturated prefix-valid path matters for ROCm's e4m3fnuz.
 
-## 3. PR #41732 (checked 2026-10-24/25)
+## 3. PR #41732 (checked /25)
 
-- Open, not a draft, **no reviews**, 7 failing CI jobs (NPU and AMD suites plus their "finish" summary jobs), with no update since 2026-10-01. Its own GPU test file had not been run on the branch, per its description.
+- Open, not a draft, **no reviews**, 7 failing CI jobs (NPU and AMD suites plus their "finish" summary jobs), with no update since the check. Its own GPU test file had not been run on the branch, per its description.
 - It adds `to_fp8_satfinite` (clamp to ±`finfo.max`, then cast) and uses it in the MLA Python writers. It also switches a CUDA JIT kernel (`set_mla_kv_concat_q.cuh`) from `__NV_NOSAT` to `__NV_SATFINITE`.
 - **On main's torch 2.14.1, the Python-path clamps change nothing at runtime**, because eager casts already saturate. They still guard older or swapped torch versions. **The CUDA intrinsic change is real**: `__nv_cvt_float2_to_fp8x2(..., __NV_NOSAT, ...)` does not depend on the torch version. This is inferred from the API semantics; the kernel was not run here.
 - It does not touch `MHATokenToKVPool.set_kv_buffer`. Per section 2, that matters only on torch ≤ 2.12.

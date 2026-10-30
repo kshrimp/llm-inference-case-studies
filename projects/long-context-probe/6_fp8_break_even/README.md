@@ -18,7 +18,7 @@ Ran the 16-cell grid below in four containers (BF16, FP8, FP8, BF16), with every
 - **Per cell:** wall time, output tok/s, time to the first decode batch (prefill and admission), median decode-step time over the middle half of decode (from decode-schedule timestamps; mini-SGLang's overlap scheduler makes this a steady-state rate, not a per-kernel time), decode batch max, and end KV occupancy in tokens and bytes.
 - **Order:** BF16, FP8, FP8, BF16, one container each.
 
-**Expected signal (agent-written; the user waived predictions on 2026-10-24).** FP8's step-time saving should grow with batch × context, because that product sets the KV bytes each decode step reads. At batch 1 × context 256, KV reads are tiny next to the 1.2 GB of weights per step, so FP8 should be neutral or slightly slower, because the extra clamp and cast kernels (about 0.18 ms/step in experiment 3) remain. A loss in any cell would be the most useful finding.
+**Expected signal (agent-written; the user waived a formal prediction).** FP8's step-time saving should grow with batch × context, because that product sets the KV bytes each decode step reads. At batch 1 × context 256, KV reads are tiny next to the 1.2 GB of weights per step, so FP8 should be neutral or slightly slower, because the extra clamp and cast kernels (about 0.18 ms/step in experiment 3) remain. A loss in any cell would be the most useful finding.
 
 ## How to run
 

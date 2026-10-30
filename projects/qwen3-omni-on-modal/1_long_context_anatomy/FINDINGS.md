@@ -65,7 +65,7 @@ GPU busy share: 97.5–97.7% of every step period. Time attribution: kernels by 
 - The torch trace recorded CUDA runtime calls but no CPU operator events, so the launch lead is measured from `cudaGraphLaunch` to the first kernel.
 - Cost: three GPU containers (including the failed one) billed $0.38858301, $0.43991874, and $0.64267968 in app rows, $1.47118143 in total against a $6.77 ceiling; the account total after experiment 1 is $6.1764038.
 
-## Review checks (2026-10-28, no new GPU runs)
+## Review checks (no new GPU runs)
 
 A second pass over the raw traces, server logs, and GPU samples, to test the claims above. Reproduce with `kernel_breakdown.py <trace>` and `startup_memory.py`.
 

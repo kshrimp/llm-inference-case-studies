@@ -1,4 +1,4 @@
-# Experiment 3 findings: cold start, zero to first token (2026-10-30)
+# Experiment 3 findings: cold start, zero to first token
 
 ## What ran
 
@@ -43,4 +43,4 @@ The F2 priming run wrote 209 Triton files and 106 SGLang (DeepGEMM) files to the
 - Short request (1,150-token prompt, 32 tokens). Cold-start time is almost entirely server startup, so a longer request would add only its own TTFT.
 - FP8 with Triton dense GEMMs was not run as a cold-start condition. 2c showed a 60 s prefill capture for it when its tuned kernels were new, which is no better than DeepGEMM with caches kept.
 - Client on this WSL machine over the public Modal API; another network adds its own latency to the "outside" column.
-- Costs: 10 cold containers (one priming) plus two failed snapshot containers. Billing for 2026-10-30 not yet posted at writing; see the study-plan cost log.
+- Costs: 10 cold containers (one priming) plus two failed snapshot containers. Billing for not yet posted at writing; see the study-plan cost log.

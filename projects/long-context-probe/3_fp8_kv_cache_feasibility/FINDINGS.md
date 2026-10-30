@@ -1,6 +1,6 @@
-# FP8 KV-cache feasibility: findings (2026-10-23, v2 2026-10-24)
+# FP8 KV-cache feasibility: findings (v2 )
 
-**v2 update:** a saturating cast (clamp to ±448) removes v1's NaN failure. Outputs are coherent, 1,024-input output is identical to BF16, decode attention is −42.3% per step, and whole-call time is −13.7% (2 vs 2 runs). See [v2 results](#v2-saturating-cast-results-2026-10-24). The v1 sections below are kept as recorded.
+**v2 update:** a saturating cast (clamp to ±448) removes v1's NaN failure. Outputs are coherent, 1,024-input output is identical to BF16, decode attention is −42.3% per step, and whole-call time is −13.7% (2 vs 2 runs). See [v2 results](#v2-saturating-cast-results-). The v1 sections below are kept as recorded.
 
 **Result: the unscaled FP8 (e4m3, scale 1.0) KV path is mechanically faster but numerically broken for this workload.** It halves KV bytes per token, doubles pool token capacity, and cuts decode-attention kernel time by 43%. However, some layer-0 key values exceed FP8's ±448 range, and casting them produces NaN. The NaN then spreads, and every token generated after the first is `0` (`!`). The timing below is therefore **not a valid speedup claim**; it measures kernels running on partly-NaN data. A correct FP8 treatment needs saturation or scaling; see "Solutions considered" and "Plan".
 
@@ -75,7 +75,7 @@ A diagnostic stage (`--stage diagnose`) zeroed the pool, generated 32 tokens fro
 | 3. Diverges late, stays coherent | Long prompts: NaN collapse after token 1; natural: 6/8 coherent divergence at tokens 5–47, 2/8 collapse | Falsified for this unscaled path |
 | 4. Logical KV halves, pool bytes equal, capacity ~2× | 0.961 → 0.481 GiB; 18.457 GiB both; 172,544 → 345,344 | Met |
 
-## v2 (saturating cast) results, 2026-10-24
+## v2 (saturating cast) results
 
 The clamp-only patch [`fp8_kv_cache_v2_saturate.patch`](fp8_kv_cache_v2_saturate.patch) (sha256 `1140df00…`) **removes the failure and keeps the speed mechanism.** The BF16 control reused the unmodified-upstream image, with the same pins as v1.
 
@@ -104,11 +104,11 @@ The clamp-only patch [`fp8_kv_cache_v2_saturate.patch`](fp8_kv_cache_v2_saturate
 
 Across the trace, decode attention saves 202.3 ms. The clamp and cast add 14,308 elementwise launches (23.1 ms, about 0.18 ms/step), twice v1's cast-only overhead. That is a candidate for fusing into the store kernel.
 
-**Whole call.** The BF16 mean is 9.830 s (two runs 0.024 s apart); the `fp8_sat` mean is 8.485 s (0.574 s apart): **−13.7%**. The repeat spread is smaller than the difference, but there are only two repeats per variant, and the BF16 run 1 here (9.84 s) was 0.76 s faster than v1's BF16 run 1 on 2026-10-23. Treat this as a measured, single-request offline result, not a general speedup.
+**Whole call.** The BF16 mean is 9.830 s (two runs 0.024 s apart); the `fp8_sat` mean is 8.485 s (0.574 s apart): **−13.7%**. The repeat spread is smaller than the difference, but there are only two repeats per variant, and the BF16 run 1 here (9.84 s) was 0.76 s faster than v1's BF16 run 1 . Treat this as a measured, single-request offline result, not a general speedup.
 
-## Accuracy eval (2026-10-24)
+## Accuracy eval
 
-`--stage eval` asks 200 held-out two-digit arithmetic questions (seed 20261024: 69 `+`, 63 `−`, 68 `×`), each "What is a op b? Answer with only the number.", through Qwen3's chat template with thinking disabled. Decoding is greedy with at most 24 tokens. Each variant runs in its own container on its experiment-3 image. The authoritative scorer is [`score_eval.py`](score_eval.py), which takes the **last** integer in the answer. The `accuracy` stored in the 2026-10-24 records came from a first-integer parse that scored answers like "85 * 32 = 2720" as 85; ignore it.
+`--stage eval` asks 200 held-out two-digit arithmetic questions (seed 20261024: 69 `+`, 63 `−`, 68 `×`), each "What is a op b? Answer with only the number.", through Qwen3's chat template with thinking disabled. Decoding is greedy with at most 24 tokens. Each variant runs in its own container on its experiment-3 image. The authoritative scorer is [`score_eval.py`](score_eval.py), which takes the **last** integer in the answer. The `accuracy` stored in the records came from a first-integer parse that scored answers like "85 * 32 = 2720" as 85; ignore it.
 
 | KV cache | Correct | × | − | + | Outputs with token-0 runs | Run ID |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
@@ -140,23 +140,23 @@ The v1 patch **is not usable**: it would fail on real traffic, since 2 of 8 ordi
 
 One scale for the whole model would be poor. Layer-0 K reaches 516, while every other layer's K stays at or below about 221, and V peaks at 89.5. A scale large enough for layer 0 would waste precision in every other layer. Per-layer scales fit naturally because attention is called once per layer.
 
-## Plan (decided 2026-10-24)
+## Plan (decided )
 
-1. **v2 = option A, clamp only.** This tests whether range was the *only* problem. **Done 2026-10-24; it passed** (see [v2 results](#v2-saturating-cast-results-2026-10-24)).
+1. **v2 = option A, clamp only.** This tests whether range was the *only* problem. **Done; it passed** (see [v2 results](#v2-saturating-cast-results-)).
 2. Protocol, same as v1: pilot, BF16/`fp8_sat` diagnostics, then BF16 → fp8_sat → fp8_sat → BF16 with traces. **Done.**
 3. Success criteria for v2: 0 NaN bytes, no token-`0` runs, prompt-dependent hashes, coherent text. **All met.**
 4. v2 is a diagnostic for the range question, not the final design. Logits are not instrumented.
 
-## How full SGLang handles this (source reading, 2026-10-24; not yet run)
+## How full SGLang handles this (source reading, ; not yet run)
 
-Read from the `sglang==0.5.9` wheel (the serving track's pin) and from `sgl-project/sglang` main at `7d996300b98e3f74a7e79adefbac4d95de0da508` (2026-10-24). These are code observations only; nothing was executed.
+Read from the `sglang==0.5.9` wheel (the serving track's pin) and from `sgl-project/sglang` main at `7d996300b98e3f74a7e79adefbac4d95de0da508`. These are code observations only; nothing was executed.
 
 - **0.5.9, `mem_cache/memory_pool.py::MHATokenToKVPool.set_kv_buffer`:** if K/V dtype differs from the cache, it divides by `k_scale`/`v_scale` when they are not `None`, then calls plain `cache_k.to(self.dtype)`. There is **no clamp**, the same pattern as our v1. The store kernel after it is a byte copy.
 - **0.5.9, scale defaults:** `RadixAttention` initializes `k_scale = None`. With `--kv-cache-dtype fp8_e4m3` and no `--quantization-param-path`, `model_runner.py` only logs "Using FP8 KV cache but no scaling factors provided. Defaulting to scaling factors of 1.0. This may lead to less accurate results!" Qwen3 implements `load_kv_cache_scales`, so a per-layer scale JSON is supported. Even with scales there is no clamp, so any value above 448·s would still become NaN.
 - **main:** the same plain cast remains in `MHATokenToKVPool.set_kv_buffer` (and `MHATokenToKVPoolFP4`). A newer `set_kv_buffer_prefix_valid` path and its fused Triton kernel **do saturate** (`saturate_to_fp8_range`, `FP8_MAX`), with the comment "Saturate like the fused kernel above". SGLang has recognized the hazard but does not apply it on every write path.
-- **Implication (hypothesis):** SGLang 0.5.9, and possibly main, with `--kv-cache-dtype fp8_e4m3` and default scales could hit our v1 failure on Qwen3-0.6B when layer-0 K exceeds about 464. Its warning says "less accurate", but our evidence shows NaN collapse. Model code, the attention backend, or the prefill path could differ, so this must be reproduced before any upstream claim. **Upstream search (2026-10-24):** open PR [#41732](https://github.com/sgl-project/sglang/pull/41732) ("Saturate bf16->e4m3 KV/QKV casts to ±448 instead of overflowing to NaN", opened 2026-09-29, unmerged, GPU tests not yet run) fixes this class of bug for **MLA** writers only. `MHATokenToKVPool.set_kv_buffer`, used by Qwen3, is unchanged in its diff. No duplicate MHA report was found; that is a search result, not proof.
+- **Implication (hypothesis):** SGLang 0.5.9, and possibly main, with `--kv-cache-dtype fp8_e4m3` and default scales could hit our v1 failure on Qwen3-0.6B when layer-0 K exceeds about 464. Its warning says "less accurate", but our evidence shows NaN collapse. Model code, the attention backend, or the prefill path could differ, so this must be reproduced before any upstream claim. **Upstream search:** open PR [#41732](https://github.com/sgl-project/sglang/pull/41732) ("Saturate bf16->e4m3 KV/QKV casts to ±448 instead of overflowing to NaN", opened, unmerged, GPU tests not yet run) fixes this class of bug for **MLA** writers only. `MHATokenToKVPool.set_kv_buffer`, used by Qwen3, is unchanged in its diff. No duplicate MHA report was found; that is a search result, not proof.
 
-## Next steps: outcomes (updated 2026-10-24)
+## Next steps: outcomes (updated after validation)
 
 1. **Full-SGLang reproduction: done, as [experiment 4](../4_sglang_fp8_kv_reproduction/FINDINGS.md).** SGLang 0.5.9 writes the same NaN bytes, and its default FP8 output is correct only because it always uses tensor-core decode for FP8 KV. Forcing CUDA-core decode reproduces v1's failure byte-for-byte. Remaining: run the clamp in SGLang under CUDA-core decode, check SGLang main, then (the user's call) post evidence on PR #41732.
 2. **FP8 capacity on the W2 benchmark: done, as [experiment 5](../5_fp8_kv_capacity_w2/README.md).** Throughput rose 62.6% (1,818 → 2,956 tok/s). The capacity-matched control attributes +47.6% to cheaper attention at identical batching and +10.5% to doubled concurrency.

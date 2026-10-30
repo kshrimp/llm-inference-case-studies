@@ -1,6 +1,6 @@
 # Experiment 2: audio-duration validation
 
-**Status:** conditional. Run after [experiment 1](../1_stage_breakdown/README.md) only if the audio path, request correlation, stage clocks, cache protocol, and artifact validation work. Settings frozen 2026-10-26 ([project README](../README.md#frozen-settings-for-b-accepted-2026-10-26)); no user prediction (waived).
+**Status:** conditional. Run after [experiment 1](../1_stage_breakdown/README.md) only if the audio path, request correlation, stage clocks, cache protocol, and artifact validation work. Settings frozen ([project README](../README.md#frozen-settings-for-b-accepted-)); no user prediction (waived).
 
 ## Question
 

@@ -1,4 +1,4 @@
-# First long-context probe findings — 2026-10-23
+# First long-context probe findings —
 
 ## What ran
 
@@ -49,4 +49,4 @@ The next *scoped* test is specified in the context-length validation runbook: co
 
 ## Cost and cleanup handoff
 
-The four local `run.json` files record wall-clock start/end and timed `generate` duration, **not Modal billable seconds**. The user supplied a `modal billing report --start 2026-10-01 --end 2026-11-01 --csv` export on 2026-10-23. Its four `long-context-probe` rows total **$0.11884565** for the four modes combined; the report groups charges by app, so it does not support a per-mode bill. The user reports all apps closed. This cleanup state was user-confirmed, not independently observed by this agent because the Modal CLI listing did not return here. The downloaded traces have been moved from the repository root into their matching git-ignored result folders. No additional GPU run was launched for this analysis.
+The four local `run.json` files record wall-clock start/end and timed `generate` duration, **not Modal billable seconds**. The user supplied a `modal billing report --start "$START_DATE" --end "$END_DATE" --csv` export . Its four `long-context-probe` rows total **$0.11884565** for the four modes combined; the report groups charges by app, so it does not support a per-mode bill. The user reports all apps closed. This cleanup state was user-confirmed, not independently observed by this agent because the Modal CLI listing did not return here. The downloaded traces have been moved from the repository root into their matching git-ignored result folders. No additional GPU run was launched for this analysis.

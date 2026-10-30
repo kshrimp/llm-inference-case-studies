@@ -28,9 +28,9 @@ Output: KV capacity, step time vs concurrency, and the closed-loop maximum throu
 
 A rate passes only if every criterion holds. The reported capacity is the highest passing rate.
 
-**Dated notes (2026-10-30, before the 4b run; the criteria above are unchanged):**
+**Pre-run notes (the criteria above are unchanged):**
 - *Rate definitions, as implemented:* the offered rate is the requests actually sent in the measured window ÷ 300 s, and the completed rate is the requests that finished inside the window ÷ 300 s. Comparing against the Poisson mean instead would fail a perfect server about 30% of the time at 0.35 req/s, purely from arrival noise.
-- *Fractions not run:* BF16 0.90 at 0.25× (0.18 req/s, about 55 expected requests) and BF16 0.784 at 0.25× and 0.5× (0.08 and 0.16 req/s). Each expects fewer than the 60-request minimum in 300 s, so the frozen rule would report it as under-sampled and unused. BF16 0.784 runs 0.7× and 1.0× only (user-approved scope, 2026-10-29). The bisection step is not run: the container's 80-minute timeout does not leave room for it.
+- *Fractions not run:* BF16 0.90 at 0.25× (0.18 req/s, about 55 expected requests) and BF16 0.784 at 0.25× and 0.5× (0.08 and 0.16 req/s). Each expects fewer than the 60-request minimum in 300 s, so the frozen rule would report it as under-sampled and unused. BF16 0.784 runs 0.7× and 1.0× only (user-approved scope). The bisection step is not run: the container's 80-minute timeout does not leave room for it.
 - *FP8 maximum:* the closed-loop maximum is the larger of 4a's 1,390 tok/s and new c32 and c40 levels run at the start of the FP8 session, fixed before any open-loop rate.
 - *Prompts and compiles:* the 50 prompts are sized once to 8,000 ± 10 tokens with the server's count. Every session first sends each prompt once with `max_tokens` 1. That checks the counts against the sized set and triggers per-shape compiles before measurement.
 - *Request deadline:* 120 s for the whole request (not per read), as frozen.

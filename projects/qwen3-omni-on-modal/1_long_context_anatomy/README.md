@@ -18,7 +18,7 @@
 4. **py-spy is for identification, not accounting.** Its samples name which Python and native functions dominate the idle gaps. They do not assign milliseconds.
 5. **Bound check.** Compare the median step with the 2.07 ms floor and say which categories hold the excess. Check whether async decode (upstream PR #908) and CUDA graphs are active in the resolved config.
 
-**Agent expectation (not the user's; predictions waived 2026-10-26):** decode is 3.5 to 5 ms/token. The fused MoE kernels at M = 1 hold most of the excess over the floor, and the L − S step difference is larger than 0.2 ms.
+**Agent expectation (not the user's; predictions waived ):** decode is 3.5 to 5 ms/token. The fused MoE kernels at M = 1 hold most of the excess over the floor, and the L − S step difference is larger than 0.2 ms.
 
 **Validity gates.** Every request returns exactly 1,000 tokens with no errors. Prompt token counts match the stored prompts. If the traced median step differs from the untraced median step by more than 15%, report the profiler overhead and use untraced numbers for all totals.
 

@@ -18,7 +18,7 @@ As run (`app.py --stage fp8-smoke`, one container, servers started in the order 
 
 ## Step 2b: comparison (one container per condition)
 
-> **Superseded by the redesign in [FINDINGS.md](FINDINGS.md#go--no-go-for-2b) (2026-10-28).** 2a showed that FP8 is 46–50% slower at batch 1. 2b now traces B and tests the dense-GEMM and MoE backend choices, in one container plus one repeat. The original design is kept below for the record.
+> **Superseded by the redesign in [FINDINGS.md](FINDINGS.md#go--no-go-for-2b).** 2a showed that FP8 is 46–50% slower at batch 1. 2b now traces B and tests the dense-GEMM and MoE backend choices, in one container plus one repeat. The original design is kept below for the record.
 
 Each container: 2 warmups, then 5 untraced 8k/1k requests, 1 traced request, and the quality set. A is run first and its outputs are the BF16 reference.
 
@@ -30,7 +30,7 @@ Loaded speed (8 and 32 concurrent requests) moves to experiment 4, which uses fr
 
 **Agent expectation (not the user's), revised after experiment 1:** B decodes at **3.4–3.9 ms/token** (BF16: 4.45). The expert GEMMs run at about 70% of peak bandwidth and should gain close to 2× on bytes (about −0.7 to −0.8 ms). The per-layer projection GEMMs are latency-bound at about 46% of peak and gain little (about −0.2 to −0.3 ms). FP8 adds per-token activation-quantization kernels (+0.1 to +0.4 ms). C adds little over B at batch 1: the KV byte floor at 8k is 0.25 ms, and most attention time is fixed cost. **FP8's larger value is probably capacity** (weights 57 → about 37 GB frees about 20 GB for KV), which experiment 4 measures.
 
-## Changes after the experiment 1 review (2026-10-28)
+## Changes after the experiment 1 review
 
 - **Quality probe:** the copy-task outputs are a weak quality check, because copying is easy and a quantized model can copy perfectly while reasoning worse. Keep exact match on the 5 measured requests only as a sanity check. The pass decision rests on the retrieval set plus 20 free-generation prompts (greedy, 256 tokens), scored by exact match against A and by first divergence position.
 - **Bandwidth calibration:** each 2b container first measures achievable HBM bandwidth with a large device-to-device `torch` copy (about 10 s). Every "% of peak" is then reported against both the datasheet 3.35 TB/s and the measured value.
