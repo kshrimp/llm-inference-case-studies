@@ -1,0 +1,88 @@
+mini-SGLang (MIT) study patch: fix use-after-free in CacheManager.cache_req for still-running requests, plus a regression test.
+Base: https://github.com/sgl-project/mini-sglang @ 9a91cfafe754aa85daee49998176275667eb58f2 (also main as of 2026-10-25).
+Apply: git apply cache_req_uaf_fix.patch  (git ignores these header lines)
+
+diff --git a/python/minisgl/scheduler/cache.py b/python/minisgl/scheduler/cache.py
+index abe42ba..29e0dec 100644
+--- a/python/minisgl/scheduler/cache.py
++++ b/python/minisgl/scheduler/cache.py
+@@ -71,7 +71,13 @@ class CacheManager:
+         # unlock until all operations on handle is done
+         self.unlock(old_handle)
+         # this part is already in the prefix cache, free it
+-        self._free(page_indices[old_handle.cached_len : cached_len])
++        duplicate = page_indices[old_handle.cached_len : cached_len].clone()
++        if not finished and len(duplicate) > 0:
++            # the request keeps running: point it at the cached copy before freeing its own,
++            # otherwise its page table still references the freed (and soon reused) pages
++            shared = new_handle.get_matched_indices()[old_handle.cached_len : cached_len]
++            page_indices[old_handle.cached_len : cached_len] = shared
++        self._free(duplicate)
+         if finished:  # this tail part should be freed
+             self._free(page_indices[new_handle.cached_len :])
+         else:  # keep the tail part, update the handle
+diff --git a/tests/core/test_cache_req_shared_prefix.py b/tests/core/test_cache_req_shared_prefix.py
+new file mode 100644
+index 0000000..e8b5055
+--- /dev/null
++++ b/tests/core/test_cache_req_shared_prefix.py
+@@ -0,0 +1,59 @@
++"""
++Test that CacheManager.cache_req keeps a still-running request's page table valid when
++another request inserted the same prefix into the radix cache first.
++"""
++
++from __future__ import annotations
++
++from types import SimpleNamespace
++
++import pytest
++import torch
++
++import minisgl.core as core
++from minisgl.scheduler.cache import CacheManager
++
++
++@pytest.fixture(autouse=True)
++def reset_global_ctx():
++    """Reset global context before and after each test."""
++    old_ctx = core._GLOBAL_CTX
++    core._GLOBAL_CTX = None
++    yield
++    core._GLOBAL_CTX = old_ctx
++
++
++def _admit(cm: CacheManager, input_ids: torch.Tensor, table_idx: int) -> SimpleNamespace:
++    """Admit and prefill a request: match, lock, allocate its pages, write its page-table row."""
++    handle = cm.match_req(SimpleNamespace(input_len=len(input_ids), input_ids=input_ids)).cuda_handle
++    cm.lock(handle)
++    pages = cm._allocate(len(input_ids) // cm.page_size)
++    cm.page_table[table_idx, : len(input_ids)] = cm._page_to_token(pages)
++    return SimpleNamespace(input_ids=input_ids, cached_len=len(input_ids), table_idx=table_idx,
++                           cache_handle=handle)
++
++
++class TestCacheReqSharedPrefix:
++    def test_running_request_does_not_keep_freed_pages(self):
++        """Two requests with the same prompt prefill together; both stay running after caching."""
++        page_size, num_pages, prompt_len = 4, 8, 8
++        core.set_global_ctx(core.Context(page_size=page_size))
++        page_table = torch.zeros((2, prompt_len), dtype=torch.int32)
++        cm = CacheManager(num_pages, page_size, page_table, type="radix")
++        input_ids = torch.arange(prompt_len, dtype=torch.int32)
++
++        # Both are admitted before either is cached, so neither gets a prefix hit.
++        reqs = [_admit(cm, input_ids, table_idx) for table_idx in range(2)]
++        for req in reqs:
++            cm.cache_req(req, finished=False)  # still running: decode continues
++
++        free_pages = set(cm.free_slots.tolist())
++        for req in reqs:
++            row_pages = set(cm.page_table[req.table_idx, :prompt_len:page_size].tolist())
++            assert not row_pages & free_pages, (
++                f"running request {req.table_idx} references freed pages {row_pages & free_pages}"
++            )
++        # The second request now reads the first request's cached copy of the shared prefix.
++        assert torch.equal(cm.page_table[1, :prompt_len], cm.page_table[0, :prompt_len])
++        # Its duplicate pages were returned, so nothing leaked: 2 pages cached, 6 free.
++        assert len(cm.free_slots) == num_pages - prompt_len // page_size

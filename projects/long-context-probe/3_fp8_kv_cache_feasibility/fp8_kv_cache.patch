@@ -1,0 +1,142 @@
+FP8 (e4m3) KV-cache storage study patch for mini-SGLang (MIT licensed).
+Base: https://github.com/sgl-project/mini-sglang @ 9a91cfafe754aa85daee49998176275667eb58f2
+Modifies upstream files; local study instrumentation only, not an upstream proposal.
+Apply: git apply fp8_kv_cache.patch  (git ignores these header lines)
+
+diff --git a/python/minisgl/attention/fi.py b/python/minisgl/attention/fi.py
+index f390137..aeb9234 100644
+--- a/python/minisgl/attention/fi.py
++++ b/python/minisgl/attention/fi.py
+@@ -57,7 +57,8 @@ class FIMetadata(BaseAttnMetadata):
+     page_size:          Literal[1] # currently only support page_size=1
+     pos_encoding_mode:  str
+     seq_lens_cpu:       torch.Tensor  # on cpu
+-    dtype:              torch.dtype
++    dtype:              torch.dtype  # KV cache dtype
++    q_dtype:            torch.dtype
+     wrapper:            BatchPrefillWithPagedKVCacheWrapper | BatchDecodeWithPagedKVCacheWrapper
+     initialized:        bool = False
+     # fmt: on
+@@ -86,6 +87,7 @@ class FlashInferBackend(BaseAttnBackend):
+ 
+         self.config = config
+         self.kvcache = get_global_ctx().kv_cache
++        self.q_dtype = self.kvcache.dtype  # engine overrides this when KV is quantized
+         self.device = self.kvcache.device
+         self.float_workspace_buffer = torch.empty(
+             128 * 1024 * 1024, dtype=torch.uint8, device=self.device
+@@ -142,7 +144,7 @@ class FlashInferBackend(BaseAttnBackend):
+                 pos_encoding_mode=metadata.pos_encoding_mode,
+                 seq_lens=metadata.seq_lens_cpu,
+                 data_type=metadata.dtype,
+-                q_data_type=metadata.dtype,
++                q_data_type=metadata.q_dtype,
+                 kv_data_type=metadata.dtype,
+                 non_blocking=True,
+             )
+@@ -158,7 +160,7 @@ class FlashInferBackend(BaseAttnBackend):
+                 page_size=metadata.page_size,
+                 pos_encoding_mode=metadata.pos_encoding_mode,
+                 seq_lens=metadata.seq_lens_cpu,
+-                q_data_type=metadata.dtype,
++                q_data_type=metadata.q_dtype,
+                 kv_data_type=metadata.dtype,
+                 non_blocking=True,
+                 causal=True,
+@@ -221,6 +223,7 @@ class FlashInferBackend(BaseAttnBackend):
+             pos_encoding_mode="NONE",
+             seq_lens_cpu=seq_len_cpu,
+             dtype=self.kvcache.dtype,
++            q_dtype=self.q_dtype,
+             wrapper=self.decode_wrappers if batch.is_decode else self.prefill_wrapper,
+         )
+ 
+diff --git a/python/minisgl/engine/config.py b/python/minisgl/engine/config.py
+index bbee54e..11e7231 100644
+--- a/python/minisgl/engine/config.py
++++ b/python/minisgl/engine/config.py
+@@ -29,6 +29,7 @@ class EngineConfig:
+     use_pynccl: bool = True
+     max_seq_len_override: int | None = None
+     num_page_override: int | None = None  # if not None, will override the number of pages
++    kv_cache_dtype: str = "auto"  # "auto" (model dtype) or "fp8_e4m3" (FlashInfer only)
+ 
+     @cached_property
+     def hf_config(self):
+diff --git a/python/minisgl/engine/engine.py b/python/minisgl/engine/engine.py
+index ea29a96..6aa878a 100644
+--- a/python/minisgl/engine/engine.py
++++ b/python/minisgl/engine/engine.py
+@@ -38,6 +38,7 @@ class Engine:
+         self.stream = torch.cuda.Stream()
+         torch.cuda.set_stream(self.stream)
+         self.dtype = config.dtype
++        self.kv_dtype = _resolve_kv_dtype(config)
+         self.ctx = Context(config.page_size)
+         set_global_ctx(self.ctx)
+ 
+@@ -59,7 +60,7 @@ class Engine:
+             num_pages=self.num_pages + 1,  # +1 for dummy page
+             page_size=config.page_size,
+             device=self.device,
+-            dtype=self.dtype,
++            dtype=self.kv_dtype,
+         )
+ 
+         # ======================= Page table initialization ========================
+@@ -76,6 +77,8 @@ class Engine:
+         self.ctx.attn_backend = self.attn_backend = create_attention_backend(
+             config.attention_backend, config.model_config
+         )
++        if self.kv_dtype != self.dtype:  # queries stay in the model dtype
++            self.attn_backend.q_dtype = self.dtype
+         if config.model_config.is_moe:
+             self.ctx.moe_backend = self.moe_backend = create_moe_backend(config.moe_backend)
+ 
+@@ -152,7 +155,7 @@ class Engine:
+             * config.model_config.head_dim
+             * div_even(config.model_config.num_kv_heads, config.tp_info.size, allow_replicate=True)
+             * config.page_size
+-            * self.dtype.itemsize
++            * self.kv_dtype.itemsize
+             * config.model_config.num_layers
+         )
+         num_pages = config.num_page_override
+@@ -215,6 +218,14 @@ def _align_up_32(num: int) -> int:
+     return (num + 31) // 32 * 32
+ 
+ 
++def _resolve_kv_dtype(config: EngineConfig) -> torch.dtype:
++    if config.kv_cache_dtype == "auto":
++        return config.dtype
++    if config.kv_cache_dtype == "fp8_e4m3":
++        return torch.float8_e4m3fn
++    raise ValueError(f"Unsupported kv_cache_dtype: {config.kv_cache_dtype}")
++
++
+ def _adjust_config(config: EngineConfig):
+     def override(attr: str, value: Any):  # this is dangerous, use with caution
+         object.__setattr__(config, attr, value)
+@@ -224,6 +235,9 @@ def _adjust_config(config: EngineConfig):
+         override("attention_backend", backend)
+         logger.info_rank0(f"Auto-selected attention backend: {config.attention_backend}")
+ 
++    if config.kv_cache_dtype != "auto" and config.attention_backend != "fi":
++        raise ValueError("FP8 KV cache is only implemented for the FlashInfer ('fi') backend")
++
+     if "trtllm" in config.attention_backend and config.page_size not in [16, 32, 64]:
+         override("page_size", 64)
+         logger.warning_rank0("Page size is overridden to 64 for TRTLLM backend")
+diff --git a/python/minisgl/kvcache/mha_pool.py b/python/minisgl/kvcache/mha_pool.py
+index 332d909..6b1f7e7 100644
+--- a/python/minisgl/kvcache/mha_pool.py
++++ b/python/minisgl/kvcache/mha_pool.py
+@@ -47,6 +47,8 @@ class MHAKVCache(BaseKVCachePool):
+     ) -> None:
+         from minisgl.kernel import store_cache
+ 
++        if k.dtype != self._kv_buffer.dtype:  # e.g. BF16 activations into an FP8 cache
++            k, v = k.to(self._kv_buffer.dtype), v.to(self._kv_buffer.dtype)
+         store_cache(
+             k_cache=self._k_buffer[layer_id].view(self._storage_shape),
+             v_cache=self._v_buffer[layer_id].view(self._storage_shape),
